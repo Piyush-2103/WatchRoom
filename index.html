@@ -30,7 +30,18 @@ main{display:flex;flex-direction:column;min-height:0;padding:12px;gap:10px}
 #stage{flex:1;min-height:240px;background:#000;border-radius:10px;position:relative;overflow:hidden;display:grid;place-items:center}
 #stage>div{position:absolute;inset:0}
 #stage video,#stage iframe{width:100%;height:100%;border:0;background:#000}
-#ph{color:var(--mut);text-align:center;padding:20px}
+#ph{color:var(--mut);text-align:center;padding:20px;display:grid;place-items:center}
+select{background:#0f0d0b;border:1px solid var(--line);border-radius:8px;padding:8px;color:inherit}
+#rdy{color:var(--ac);align-self:center;font-size:13px}
+#rx{pointer-events:none;overflow:hidden;z-index:2}
+.fl{position:absolute;bottom:56px;font-size:34px;animation:fl 2.8s ease-out forwards}
+@keyframes fl{to{transform:translateY(-260px);opacity:0}}
+#stage>#ctl{inset:0 0 auto 0;height:auto;display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(#000c,transparent);opacity:0;transition:opacity .2s;z-index:3}
+#stage:hover #ctl,#ctl:focus-within{opacity:1}
+#ctl button{padding:4px 10px;background:#0008}#ctl input{width:110px;accent-color:var(--ac)}
+#reacts{display:flex;gap:6px}#reacts button{padding:4px 12px;font-size:18px;transition:transform .12s}#reacts button:active{transform:scale(1.3)}
+.tile{transition:border-color .2s}.tile:hover{border-color:var(--ac)}
+@media(prefers-reduced-motion:reduce){.fl{animation-duration:.01s}*{transition:none!important}}
 #tiles{display:flex;gap:8px;overflow-x:auto;min-height:0}
 .tile{position:relative;flex:0 0 150px;aspect-ratio:16/10;background:#0f0d0b;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
 .tile video{width:100%;height:100%;object-fit:cover}
@@ -73,18 +84,23 @@ aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-h
    <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link">
    <button id="loadyt">Play YouTube</button>
    <button id="pick" class="pri">Stream a file</button>
+   <select id="q" aria-label="Stream quality"><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select>
+   <span id="rdy"></span>
    <input type="file" id="file" accept="video/*,.mkv" hidden>
   </div>
   <div id="stage">
    <div id="ph">Nothing playing yet. The host will start something shortly.</div>
    <div id="ytp" hidden><div id="yt"></div></div>
    <div id="fvp" hidden><video id="fv" controls playsinline></video></div>
-   <div id="gvp" hidden><video id="gv" controls playsinline></video></div>
+   <div id="gvp" hidden><video id="gv" playsinline></video></div>
+   <div id="rx"></div>
+   <div id="ctl" hidden><label id="volw">Volume <input type="range" id="vol" min="0" max="1" step="0.05" value="1"></label><button id="fs">Fullscreen</button></div>
   </div>
+  <div id="reacts"><button>👍</button><button>😂</button><button>😮</button><button>❤️</button><button>👏</button><button>🔥</button></div>
   <div id="tiles"></div>
  </main>
  <aside>
-  <div class="tabs"><button data-tab="chat" class="on">Chat</button><button data-tab="ppl">People</button><button data-tab="adm" id="tabadm" hidden>Host</button></div>
+  <div class="tabs"><button data-tab="chat" id="tabchat" class="on">Chat</button><button data-tab="ppl">People</button><button data-tab="adm" id="tabadm" hidden>Host</button></div>
   <div class="pane" id="chat"><div id="log"></div><input id="msg" placeholder="Message…" maxlength="500" aria-label="Message"></div>
   <div class="pane" id="ppl" hidden><ul id="ulist"></ul></div>
   <div class="pane" id="adm" hidden>
@@ -92,6 +108,7 @@ aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-h
    <label class="opt"><input type="checkbox" id="s-mic"><div>Guest microphones<small>Off mutes everyone but you</small></div></label>
    <label class="opt"><input type="checkbox" id="s-cam"><div>Guest cameras<small>Off turns guest video off</small></div></label>
    <label class="opt"><input type="checkbox" id="s-control"><div>Guests control YouTube<small>Play, pause and seek for everyone</small></div></label>
+   <label class="opt"><input type="checkbox" id="s-react"><div>Reactions<small>Let guests send emoji reactions</small></div></label>
    <label class="opt"><input type="checkbox" id="s-locked"><div>Lock room<small>Block new people from joining</small></div></label>
   </div>
  </aside>
@@ -101,22 +118,25 @@ aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-h
 <script>
 const $=s=>document.querySelector(s),sh=(e,v)=>e.hidden=!v;
 let peer,isHost=false,me={},hostConn,conns={},users={},calls={},local=null,movieStream=null,mode='none',yt=null,ytOK=false,ytId=null,applying=false,invite='';
-let S={chat:true,mic:true,cam:true,control:false,locked:false};
+let S={chat:true,mic:true,cam:true,control:false,locked:false,react:true},unread=0;
+const ready=new Set(),BR={1080:6e6,720:3.5e6,480:1.5e6};
+const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}};
 const send=(c,m)=>c&&c.open&&c.send(m);
 const bcast=(m,x)=>Object.values(conns).forEach(c=>c.peer!==x&&send(c,m));
 function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,3500)}
 
 /* ---------- connect ---------- */
 function start(host){
+  $('#create').disabled=$('#join').disabled=true;
   const name=$('#name').value.trim()||'Guest'+(Math.random()*99|0),code=$('#code').value.trim();
   if(!host&&!code)return toast('Enter a room code');
   isHost=host;
-  peer=host?new Peer('wr'+Math.random().toString(36).slice(2,8)):new Peer();
+  peer=host?new Peer('wr'+Math.random().toString(36).slice(2,8),ICE):new Peer(undefined,ICE);
   peer.on('open',id=>{
     me={id,name};users[id]={name,host};
     const room=host?id:code;invite=location.href.split('#')[0]+'#'+room;
     $('#land').hidden=true;$('#app').hidden=false;$('#rc').textContent='Room '+room;
-    if(host){sh($('#bar'),true);sh($('#tabadm'),true);applySettings()}
+    if(host){sh($('#volw'),false);sh($('#bar'),true);sh($('#tabadm'),true);applySettings()}
     else{
       hostConn=peer.connect(room,{reliable:true});
       hostConn.on('open',()=>send(hostConn,{t:'hello',name}));
@@ -126,7 +146,7 @@ function start(host){
   });
   peer.on('connection',c=>isHost&&hostAccept(c));
   peer.on('call',onCall);
-  peer.on('error',e=>toast(e.type==='peer-unavailable'?'Room not found. Check the code.':'Connection error: '+e.type));
+  peer.on('error',e=>{$('#create').disabled=$('#join').disabled=false;toast(e.type==='peer-unavailable'?'Room not found. Check the code.':'Connection error: '+e.type);if(e.type==='peer-unavailable')setTimeout(()=>location.reload(),2200)});
 }
 function hostAccept(c){
   c.on('data',d=>{
@@ -139,6 +159,8 @@ function hostAccept(c){
     }else if(conns[c.peer]){
       if(d.t==='chat'&&S.chat){const m={t:'chat',from:users[c.peer].name,text:String(d.text).slice(0,500)};bcast(m);addChat(m)}
       if(d.t==='yt'&&S.control){applyYT(d);bcast(d,c.peer)}
+      if(d.t==='react'&&S.react){bcast(d,c.peer);float(d.e)}
+      if(d.t==='ready'){ready.add(c.peer);updReady()}
     }
   });
   c.on('close',()=>{
@@ -154,6 +176,7 @@ function guestRecv(d){
   else if(d.t==='mode')setMode(d.mode,d.id)
   else if(d.t==='chat')addChat(d)
   else if(d.t==='yt')applyYT(d)
+  else if(d.t==='react')float(d.e)
   else if(d.t==='kick'){toast('The host removed you from the room');setTimeout(()=>location.reload(),1500)}
   else if(d.t==='mute'){setTrack('audio',false);toast('The host muted you')}
   else if(d.t==='denied')toast('This room is locked')
@@ -164,6 +187,7 @@ function addChat(m){
   const d=document.createElement('div'),l=$('#log');
   if(m.sys){d.className='sys';d.textContent=m.text}else{const b=document.createElement('b');b.textContent=m.from;d.append(b,document.createTextNode(m.text))}
   l.append(d);l.scrollTop=l.scrollHeight;
+  if($('#chat').hidden&&!m.sys){unread++;$('#tabchat').textContent='Chat ('+unread+')'}
 }
 const sys=text=>addChat({sys:true,text});
 function sendChat(){
@@ -171,7 +195,7 @@ function sendChat(){
   if(isHost){if(S.chat){const m={t:'chat',from:me.name,text:t};bcast(m);addChat(m)}}else send(hostConn,{t:'chat',text:t});
 }
 function renderUsers(){
-  const ul=$('#ulist');ul.innerHTML='';
+  const ul=$('#ulist');ul.innerHTML='';updReady();
   for(const id in users){
     const li=document.createElement('li'),s=document.createElement('span');
     s.textContent=users[id].name+(id===me.id?' (you)':'');li.append(s);
@@ -190,20 +214,20 @@ $('#ulist').onclick=e=>{
 
 /* ---------- admin settings ---------- */
 function applySettings(){
-  $('#msg').disabled=!S.chat&&!isHost;$('#msg').placeholder=S.chat?'Message…':'Chat is off';
+  document.querySelectorAll('#reacts button').forEach(b=>b.disabled=!isHost&&!S.react);$('#msg').disabled=!S.chat&&!isHost;$('#msg').placeholder=S.chat?'Message…':'Chat is off';
   if(!isHost){
     if(!S.mic)setTrack('audio',false);if(!S.cam)setTrack('video',false);
     $('#mic').disabled=!S.mic;$('#cmt').disabled=!S.cam;
   }
   for(const k in S){const e=$('#s-'+k);if(e)e.checked=S[k]}
 }
-['chat','mic','cam','control','locked'].forEach(k=>$('#s-'+k).onchange=e=>{S[k]=e.target.checked;bcast({t:'settings',S});applySettings()});
+['chat','mic','cam','control','react','locked'].forEach(k=>$('#s-'+k).onchange=e=>{S[k]=e.target.checked;bcast({t:'settings',S});applySettings()});
 
 /* ---------- cam & mic (mesh) ---------- */
 function setTrack(kind,on){if(local)(kind==='audio'?local.getAudioTracks():local.getVideoTracks()).forEach(t=>t.enabled=on)}
 $('#media').onclick=async()=>{
   try{
-    local=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:{echoCancellation:true,noiseSuppression:true}});
+    local=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:24}},audio:{echoCancellation:true,noiseSuppression:true}});
     addTile(me.id,local,true);sh($('#media'),false);sh($('#mic'),true);sh($('#cmt'),true);applySettings();syncCalls();
   }catch{toast('Allow camera and microphone access to join the call')}
 };
@@ -214,16 +238,16 @@ function toggle(btn,kind){
 $('#mic').onclick=e=>toggle(e.target,'audio');$('#cmt').onclick=e=>toggle(e.target,'video');
 function callCam(id){
   const c=peer.call(id,local,{metadata:{type:'cam'}});calls['cam:'+id]=c;
-  c.on('stream',s=>addTile(id,s));c.on('close',()=>delete calls['cam:'+id]);
+  c.on('stream',s=>addTile(id,s));c.on('close',()=>delete calls['cam:'+id]);setTimeout(()=>capCam(c),1000);
 }
 function syncCalls(){if(local)for(const id in users)if(id!==me.id&&!calls['cam:'+id])callCam(id)}
 function onCall(call){
   const t=call.metadata&&call.metadata.type;
   if(t==='movie'){
     call.answer();
-    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.play().catch(()=>{g.muted=true;g.play();toast('Tap the video to unmute')})});
+    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.play().catch(()=>{g.muted=true;g.play();toast('Tap the video to unmute')});smooth(call);send(hostConn,{t:'ready'})});
   }else{
-    call.answer(local||undefined);
+    call.answer(local||undefined);if(local)setTimeout(()=>capCam(call),1000);
     call.on('stream',s=>addTile(call.peer,s));call.on('close',()=>dropTile(call.peer));
   }
 }
@@ -242,7 +266,7 @@ function dropPeer(id){dropTile(id);['cam:','movie:'].forEach(p=>{if(calls[p+id])
 
 /* ---------- what's playing ---------- */
 function setMode(m,id){
-  mode=m;sh($('#ph'),m==='none');sh($('#ytp'),m==='yt');sh($('#fvp'),m==='file'&&isHost);sh($('#gvp'),m==='file'&&!isHost);
+  mode=m;sh($('#ctl'),m==='file');sh($('#ph'),m==='none');sh($('#ytp'),m==='yt');sh($('#fvp'),m==='file'&&isHost);sh($('#gvp'),m==='file'&&!isHost);
   if(m!=='yt'&&ytOK)yt.pauseVideo();
   if(m!=='file'&&!isHost)$('#gv').srcObject=null;
   if(m==='yt')loadYT(id);
@@ -292,24 +316,47 @@ $('#file').onchange=async e=>{
   try{await v.play()}catch{}
   const cap=v.captureStream||v.mozCaptureStream;
   if(!cap)return toast('Use Chrome, Edge or Firefox to stream files');
-  movieStream=cap.call(v);Object.keys(conns).forEach(callMovie);
+  movieStream=cap.call(v);ready.clear();v.pause();v.currentTime=0;Object.keys(conns).forEach(callMovie);updReady();toast('Ready to stream. Press play once everyone shows as ready.');
 };
 function callMovie(id){
   if(!movieStream)return;
   const c=peer.call(id,movieStream,{metadata:{type:'movie'}});calls['movie:'+id]=c;
   [800,3000].forEach(ms=>setTimeout(()=>boost(c),ms));
 }
-function boost(c){ /* ask for up to 12 Mbps and never trade resolution for framerate */
+function boost(c){ /* cap bitrate by chosen quality; balanced mode drops frames gracefully instead of stalling */
+  const q=+$('#q').value,h=$('#fv').videoHeight||q;
   try{c.peerConnection.getSenders().forEach(s=>{
-    if(s.track&&s.track.kind==='video'){
-      const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];
-      p.encodings[0].maxBitrate=12e6;p.degradationPreference='maintain-resolution';s.setParameters(p).catch(()=>{});
-    }})}catch{}
+    if(!s.track||s.track.kind!=='video')return;
+    s.track.contentHint='motion';
+    const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];
+    p.encodings[0].maxBitrate=BR[q];p.encodings[0].scaleResolutionDownBy=Math.max(1,h/q);p.encodings[0].maxFramerate=30;
+    p.degradationPreference='balanced';s.setParameters(p).catch(()=>{});
+  })}catch{}
 }
 function stopMovie(){
   Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>{calls[k].close();delete calls[k]});
-  movieStream=null;const v=$('#fv');v.pause();v.removeAttribute('src');v.load();
+  movieStream=null;ready.clear();updReady();const v=$('#fv');v.pause();v.removeAttribute('src');v.load();
 }
+
+/* ---------- ready gate, reactions, playback smoothing ---------- */
+function updReady(){const r=$('#rdy');if(r)r.textContent=isHost&&movieStream?'Ready: '+ready.size+'/'+Object.keys(conns).length:''}
+function float(e){
+  const d=document.createElement('div');d.className='fl';d.textContent=e;
+  d.style.left=(8+Math.random()*80)+'%';$('#rx').append(d);setTimeout(()=>d.remove(),3000);
+}
+document.querySelectorAll('#reacts button').forEach(b=>b.onclick=()=>{
+  const e=b.textContent;float(e);isHost?bcast({t:'react',e}):send(hostConn,{t:'react',e});
+});
+/* guests buffer ~1.5s: movies don't need low latency, and this hides network jitter */
+function smooth(c){[500,2500].forEach(ms=>setTimeout(()=>{try{c.peerConnection.getReceivers().forEach(r=>{
+  if('jitterBufferTarget' in r)r.jitterBufferTarget=1500;if('playoutDelayHint' in r)r.playoutDelayHint=1.5})}catch{}},ms))}
+/* webcams stay light so they never compete with the movie for bandwidth */
+function capCam(c){try{c.peerConnection.getSenders().forEach(s=>{if(s.track&&s.track.kind==='video'){
+  const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];p.encodings[0].maxBitrate=4e5;s.setParameters(p).catch(()=>{})}})}catch{}}
+$('#q').onchange=()=>Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>boost(calls[k]));
+$('#fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():$('#stage').requestFullscreen();
+$('#vol').oninput=e=>{$('#gv').volume=+e.target.value;$('#gv').muted=false};
+$('#gv').onclick=()=>{$('#gv').muted=false};
 
 /* ---------- wiring ---------- */
 $('#create').onclick=()=>start(true);$('#join').onclick=()=>start(false);
@@ -318,6 +365,7 @@ $('#copy').onclick=()=>navigator.clipboard.writeText(invite).then(()=>toast('Inv
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
   ['chat','ppl','adm'].forEach(p=>sh($('#'+p),p===b.dataset.tab));
+  if(b.dataset.tab==='chat'){unread=0;$('#tabchat').textContent='Chat'}
 });
 if(location.hash.length>1){$('#code').value=location.hash.slice(1);$('#name').focus()}
 </script></body></html>
