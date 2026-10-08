@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Watchroom</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{--bg:#14110f;--panel:#1d1916;--line:#352e28;--tx:#f1e9df;--mut:#9a8d80;--ac:#f2a33a;--bad:#e5604d}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.45 "Trebuchet MS",system-ui,sans-serif}
+button,input{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--ac)}button:disabled{opacity:.4;cursor:not-allowed}
+button.pri{background:var(--ac);color:#1a1209;border-color:var(--ac);font-weight:700}
+button.off{color:var(--bad)}
+input[type=text],input:not([type]){background:#0f0d0b;border:1px solid var(--line);border-radius:8px;padding:9px 12px;width:100%}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#land{min-height:100%;display:grid;place-items:center;padding:20px}
+.card{width:min(420px,100%);display:grid;gap:12px}
+.card h1{font:italic 700 56px/1 Georgia,serif;margin:0;letter-spacing:-1px}
+.card p{color:var(--mut);margin:0 0 8px}
+.or{color:var(--mut);text-align:center;font-size:13px}
+.row{display:flex;gap:8px}
+#app{height:100%;display:grid;grid-template-columns:1fr 330px;grid-template-rows:auto 1fr}
+header{grid-column:1/3;display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header b{font:italic 700 20px Georgia,serif;margin-right:auto}
+#rc{color:var(--mut)}
+main{display:flex;flex-direction:column;min-height:0;padding:12px;gap:10px}
+#bar{display:flex;gap:8px;flex-wrap:wrap}#bar input{flex:1;min-width:180px}
+#stage{flex:1;min-height:240px;background:#000;border-radius:10px;position:relative;overflow:hidden;display:grid;place-items:center}
+#stage>div{position:absolute;inset:0}
+#stage video,#stage iframe{width:100%;height:100%;border:0;background:#000}
+#ph{color:var(--mut);text-align:center;padding:20px}
+#tiles{display:flex;gap:8px;overflow-x:auto;min-height:0}
+.tile{position:relative;flex:0 0 150px;aspect-ratio:16/10;background:#0f0d0b;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+.tile video{width:100%;height:100%;object-fit:cover}
+.tile span{position:absolute;left:6px;bottom:4px;font-size:12px;background:#000a;padding:1px 6px;border-radius:4px}
+aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;border-radius:0;background:none;border-bottom:2px solid transparent}
+.tabs button.on{border-bottom-color:var(--ac);color:var(--ac)}
+.pane{flex:1;min-height:0;display:flex;flex-direction:column;padding:10px;gap:8px;overflow:auto}
+#log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:6px}
+#log div{word-break:break-word}#log b{color:var(--ac);margin-right:6px}#log .sys{color:var(--mut);font-size:13px;font-style:italic}
+#ppl ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#ppl li{display:flex;gap:6px;align-items:center}#ppl li span{flex:1}
+#ppl li button{padding:3px 8px;font-size:13px}
+.tag{font-size:12px;color:var(--ac)}
+.opt{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.opt small{color:var(--mut);display:block}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ac);color:#1a1209;padding:9px 16px;border-radius:8px;font-weight:700;z-index:9}
+@media(max-width:800px){#app{grid-template-columns:1fr;grid-template-rows:auto auto 360px}header{grid-column:1}aside{border-left:0;border-top:1px solid var(--line)}#stage{min-height:220px}}
+</style></head><body>
+
+<div id="land"><div class="card">
+ <h1>Watchroom</h1>
+ <p>Watch together. Free, peer-to-peer, no account needed.</p>
+ <input id="name" placeholder="Your name" maxlength="20" aria-label="Your name">
+ <button id="create" class="pri">Create a room</button>
+ <div class="or">or join a friend's room</div>
+ <div class="row"><input id="code" placeholder="Room code" aria-label="Room code"><button id="join">Join</button></div>
+</div></div>
+
+<div id="app" hidden>
+ <header>
+  <b>Watchroom</b><span id="rc"></span>
+  <button id="copy">Copy invite link</button>
+  <button id="media">Start cam &amp; mic</button>
+  <button id="mic" hidden>Mic</button><button id="cmt" hidden>Cam</button>
+ </header>
+ <main>
+  <div id="bar" hidden>
+   <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link">
+   <button id="loadyt">Play YouTube</button>
+   <button id="pick" class="pri">Stream a file</button>
+   <input type="file" id="file" accept="video/*,.mkv" hidden>
+  </div>
+  <div id="stage">
+   <div id="ph">Nothing playing yet. The host will start something shortly.</div>
+   <div id="ytp" hidden><div id="yt"></div></div>
+   <div id="fvp" hidden><video id="fv" controls playsinline></video></div>
+   <div id="gvp" hidden><video id="gv" controls playsinline></video></div>
+  </div>
+  <div id="tiles"></div>
+ </main>
+ <aside>
+  <div class="tabs"><button data-tab="chat" class="on">Chat</button><button data-tab="ppl">People</button><button data-tab="adm" id="tabadm" hidden>Host</button></div>
+  <div class="pane" id="chat"><div id="log"></div><input id="msg" placeholder="Message…" maxlength="500" aria-label="Message"></div>
+  <div class="pane" id="ppl" hidden><ul id="ulist"></ul></div>
+  <div class="pane" id="adm" hidden>
+   <label class="opt"><input type="checkbox" id="s-chat"><div>Chat<small>Let guests send messages</small></div></label>
+   <label class="opt"><input type="checkbox" id="s-mic"><div>Guest microphones<small>Off mutes everyone but you</small></div></label>
+   <label class="opt"><input type="checkbox" id="s-cam"><div>Guest cameras<small>Off turns guest video off</small></div></label>
+   <label class="opt"><input type="checkbox" id="s-control"><div>Guests control YouTube<small>Play, pause and seek for everyone</small></div></label>
+   <label class="opt"><input type="checkbox" id="s-locked"><div>Lock room<small>Block new people from joining</small></div></label>
+  </div>
+ </aside>
+</div>
+<div id="toast" hidden></div>
+
+<script>
+const $=s=>document.querySelector(s),sh=(e,v)=>e.hidden=!v;
+let peer,isHost=false,me={},hostConn,conns={},users={},calls={},local=null,movieStream=null,mode='none',yt=null,ytOK=false,ytId=null,applying=false,invite='';
+let S={chat:true,mic:true,cam:true,control:false,locked:false};
+const send=(c,m)=>c&&c.open&&c.send(m);
+const bcast=(m,x)=>Object.values(conns).forEach(c=>c.peer!==x&&send(c,m));
+function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,3500)}
+
+/* ---------- connect ---------- */
+function start(host){
+  const name=$('#name').value.trim()||'Guest'+(Math.random()*99|0),code=$('#code').value.trim();
+  if(!host&&!code)return toast('Enter a room code');
+  isHost=host;
+  peer=host?new Peer('wr'+Math.random().toString(36).slice(2,8)):new Peer();
+  peer.on('open',id=>{
+    me={id,name};users[id]={name,host};
+    const room=host?id:code;invite=location.href.split('#')[0]+'#'+room;
+    $('#land').hidden=true;$('#app').hidden=false;$('#rc').textContent='Room '+room;
+    if(host){sh($('#bar'),true);sh($('#tabadm'),true);applySettings()}
+    else{
+      hostConn=peer.connect(room,{reliable:true});
+      hostConn.on('open',()=>send(hostConn,{t:'hello',name}));
+      hostConn.on('data',guestRecv);
+      hostConn.on('close',()=>toast('Disconnected from the room'));
+    }
+  });
+  peer.on('connection',c=>isHost&&hostAccept(c));
+  peer.on('call',onCall);
+  peer.on('error',e=>toast(e.type==='peer-unavailable'?'Room not found. Check the code.':'Connection error: '+e.type));
+}
+function hostAccept(c){
+  c.on('data',d=>{
+    if(d.t==='hello'){
+      if(S.locked){send(c,{t:'denied'});return setTimeout(()=>c.close(),400)}
+      conns[c.peer]=c;users[c.peer]={name:String(d.name).slice(0,20)};
+      send(c,{t:'init',users,S,mode,ytId});
+      bcast({t:'users',users});renderUsers();sys(users[c.peer].name+' joined');
+      if(movieStream)callMovie(c.peer);
+    }else if(conns[c.peer]){
+      if(d.t==='chat'&&S.chat){const m={t:'chat',from:users[c.peer].name,text:String(d.text).slice(0,500)};bcast(m);addChat(m)}
+      if(d.t==='yt'&&S.control){applyYT(d);bcast(d,c.peer)}
+    }
+  });
+  c.on('close',()=>{
+    if(!conns[c.peer])return;
+    sys(users[c.peer].name+' left');delete conns[c.peer];delete users[c.peer];
+    bcast({t:'users',users});renderUsers();dropPeer(c.peer);
+  });
+}
+function guestRecv(d){
+  if(d.t==='init'){users=d.users;S=d.S;renderUsers();applySettings();setMode(d.mode,d.ytId)}
+  else if(d.t==='users'){users=d.users;renderUsers();syncCalls();document.querySelectorAll('.tile').forEach(t=>{if(!users[t.dataset.id])dropPeer(t.dataset.id)})}
+  else if(d.t==='settings'){S=d.S;applySettings()}
+  else if(d.t==='mode')setMode(d.mode,d.id)
+  else if(d.t==='chat')addChat(d)
+  else if(d.t==='yt')applyYT(d)
+  else if(d.t==='kick'){toast('The host removed you from the room');setTimeout(()=>location.reload(),1500)}
+  else if(d.t==='mute'){setTrack('audio',false);toast('The host muted you')}
+  else if(d.t==='denied')toast('This room is locked')
+}
+
+/* ---------- chat & people ---------- */
+function addChat(m){
+  const d=document.createElement('div'),l=$('#log');
+  if(m.sys){d.className='sys';d.textContent=m.text}else{const b=document.createElement('b');b.textContent=m.from;d.append(b,document.createTextNode(m.text))}
+  l.append(d);l.scrollTop=l.scrollHeight;
+}
+const sys=text=>addChat({sys:true,text});
+function sendChat(){
+  const i=$('#msg'),t=i.value.trim();if(!t)return;i.value='';
+  if(isHost){if(S.chat){const m={t:'chat',from:me.name,text:t};bcast(m);addChat(m)}}else send(hostConn,{t:'chat',text:t});
+}
+function renderUsers(){
+  const ul=$('#ulist');ul.innerHTML='';
+  for(const id in users){
+    const li=document.createElement('li'),s=document.createElement('span');
+    s.textContent=users[id].name+(id===me.id?' (you)':'');li.append(s);
+    if(users[id].host){const g=document.createElement('em');g.className='tag';g.textContent='host';li.append(g)}
+    else if(isHost){
+      for(const [a,l] of [['mute','Mute'],['kick','Remove']]){const b=document.createElement('button');b.textContent=l;b.dataset.a=a;b.dataset.id=id;li.append(b)}
+    }
+    ul.append(li);
+  }
+}
+$('#ulist').onclick=e=>{
+  const b=e.target.closest('button');if(!b||!isHost)return;const c=conns[b.dataset.id];
+  if(b.dataset.a==='mute')send(c,{t:'mute'});
+  else{send(c,{t:'kick'});setTimeout(()=>c&&c.close(),300)}
+};
+
+/* ---------- admin settings ---------- */
+function applySettings(){
+  $('#msg').disabled=!S.chat&&!isHost;$('#msg').placeholder=S.chat?'Message…':'Chat is off';
+  if(!isHost){
+    if(!S.mic)setTrack('audio',false);if(!S.cam)setTrack('video',false);
+    $('#mic').disabled=!S.mic;$('#cmt').disabled=!S.cam;
+  }
+  for(const k in S){const e=$('#s-'+k);if(e)e.checked=S[k]}
+}
+['chat','mic','cam','control','locked'].forEach(k=>$('#s-'+k).onchange=e=>{S[k]=e.target.checked;bcast({t:'settings',S});applySettings()});
+
+/* ---------- cam & mic (mesh) ---------- */
+function setTrack(kind,on){if(local)(kind==='audio'?local.getAudioTracks():local.getVideoTracks()).forEach(t=>t.enabled=on)}
+$('#media').onclick=async()=>{
+  try{
+    local=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:{echoCancellation:true,noiseSuppression:true}});
+    addTile(me.id,local,true);sh($('#media'),false);sh($('#mic'),true);sh($('#cmt'),true);applySettings();syncCalls();
+  }catch{toast('Allow camera and microphone access to join the call')}
+};
+function toggle(btn,kind){
+  const t=(kind==='audio'?local.getAudioTracks():local.getVideoTracks())[0];if(!t)return;
+  t.enabled=!t.enabled;btn.classList.toggle('off',!t.enabled);
+}
+$('#mic').onclick=e=>toggle(e.target,'audio');$('#cmt').onclick=e=>toggle(e.target,'video');
+function callCam(id){
+  const c=peer.call(id,local,{metadata:{type:'cam'}});calls['cam:'+id]=c;
+  c.on('stream',s=>addTile(id,s));c.on('close',()=>delete calls['cam:'+id]);
+}
+function syncCalls(){if(local)for(const id in users)if(id!==me.id&&!calls['cam:'+id])callCam(id)}
+function onCall(call){
+  const t=call.metadata&&call.metadata.type;
+  if(t==='movie'){
+    call.answer();
+    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.play().catch(()=>{g.muted=true;g.play();toast('Tap the video to unmute')})});
+  }else{
+    call.answer(local||undefined);
+    call.on('stream',s=>addTile(call.peer,s));call.on('close',()=>dropTile(call.peer));
+  }
+}
+function addTile(id,s,self){
+  let t=document.querySelector('.tile[data-id="'+id+'"]');
+  if(!t){
+    t=document.createElement('div');t.className='tile';t.dataset.id=id;
+    const v=document.createElement('video');v.autoplay=true;v.playsInline=true;v.muted=!!self;
+    const l=document.createElement('span');l.textContent=self?'You':(users[id]?users[id].name:'Guest');
+    t.append(v,l);$('#tiles').append(t);
+  }
+  t.querySelector('video').srcObject=s;
+}
+function dropTile(id){const t=document.querySelector('.tile[data-id="'+id+'"]');t&&t.remove()}
+function dropPeer(id){dropTile(id);['cam:','movie:'].forEach(p=>{if(calls[p+id]){calls[p+id].close();delete calls[p+id]}})}
+
+/* ---------- what's playing ---------- */
+function setMode(m,id){
+  mode=m;sh($('#ph'),m==='none');sh($('#ytp'),m==='yt');sh($('#fvp'),m==='file'&&isHost);sh($('#gvp'),m==='file'&&!isHost);
+  if(m!=='yt'&&ytOK)yt.pauseVideo();
+  if(m!=='file'&&!isHost)$('#gv').srcObject=null;
+  if(m==='yt')loadYT(id);
+}
+function hostMode(m,id){ytId=id||null;setMode(m,id);bcast({t:'mode',mode:m,id})}
+
+/* YouTube */
+function ytReady(cb){
+  if(window.YT&&YT.Player)return cb();
+  const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.append(s);
+  window.onYouTubeIframeAPIReady=cb;
+}
+function loadYT(id){
+  ytId=id;
+  ytReady(()=>{
+    if(yt){if(ytOK)yt.loadVideoById(id);return}
+    yt=new YT.Player('yt',{playerVars:{rel:0,playsinline:1},events:{
+      onReady:()=>{ytOK=true;yt.loadVideoById(ytId);yt.setPlaybackQuality('hd1080')},
+      onStateChange:e=>{
+        if(applying||!(isHost||S.control))return;
+        if(e.data===1||e.data===2){
+          const m={t:'yt',a:e.data===1?'play':'pause',time:yt.getCurrentTime()};
+          isHost?bcast(m):send(hostConn,m);
+        }
+      }}});
+  });
+}
+function applyYT(m){
+  if(!ytOK)return;applying=true;
+  if(Math.abs(yt.getCurrentTime()-m.time)>1.5)yt.seekTo(m.time,true);
+  const st=yt.getPlayerState(),pause=m.a==='pause'||(m.a==='sync'&&!m.playing);
+  if(pause){if(st===1)yt.pauseVideo()}else if(st!==1)yt.playVideo();
+  setTimeout(()=>applying=false,1000);
+}
+setInterval(()=>{if(isHost&&mode==='yt'&&ytOK)bcast({t:'yt',a:'sync',time:yt.getCurrentTime(),playing:yt.getPlayerState()===1})},4000);
+$('#loadyt').onclick=()=>{
+  const r=$('#yturl').value.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/);
+  if(!r)return toast('That is not a valid YouTube link');
+  stopMovie();hostMode('yt',r[1]);
+};
+
+/* Local file -> everyone (host's browser re-streams it over WebRTC) */
+$('#pick').onclick=()=>$('#file').click();
+$('#file').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  stopMovie();const v=$('#fv');v.src=URL.createObjectURL(f);hostMode('file');
+  try{await v.play()}catch{}
+  const cap=v.captureStream||v.mozCaptureStream;
+  if(!cap)return toast('Use Chrome, Edge or Firefox to stream files');
+  movieStream=cap.call(v);Object.keys(conns).forEach(callMovie);
+};
+function callMovie(id){
+  if(!movieStream)return;
+  const c=peer.call(id,movieStream,{metadata:{type:'movie'}});calls['movie:'+id]=c;
+  [800,3000].forEach(ms=>setTimeout(()=>boost(c),ms));
+}
+function boost(c){ /* ask for up to 12 Mbps and never trade resolution for framerate */
+  try{c.peerConnection.getSenders().forEach(s=>{
+    if(s.track&&s.track.kind==='video'){
+      const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];
+      p.encodings[0].maxBitrate=12e6;p.degradationPreference='maintain-resolution';s.setParameters(p).catch(()=>{});
+    }})}catch{}
+}
+function stopMovie(){
+  Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>{calls[k].close();delete calls[k]});
+  movieStream=null;const v=$('#fv');v.pause();v.removeAttribute('src');v.load();
+}
+
+/* ---------- wiring ---------- */
+$('#create').onclick=()=>start(true);$('#join').onclick=()=>start(false);
+$('#msg').onkeydown=e=>e.key==='Enter'&&sendChat();
+$('#copy').onclick=()=>navigator.clipboard.writeText(invite).then(()=>toast('Invite link copied'));
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  ['chat','ppl','adm'].forEach(p=>sh($('#'+p),p===b.dataset.tab));
+});
+if(location.hash.length>1){$('#code').value=location.hash.slice(1);$('#name').focus()}
+</script></body></html>
