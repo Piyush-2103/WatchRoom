@@ -4,99 +4,97 @@
 <title>Watchroom</title>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
-:root{--bg:#14110f;--panel:#1d1916;--line:#352e28;--tx:#f1e9df;--mut:#9a8d80;--ac:#f2a33a;--bad:#e5604d}
+:root{--bg:#090c1c;--card:#ffffff0d;--line:#ffffff1c;--tx:#eef0ff;--mut:#9aa3cf;--ac:#7c5cff;--ac2:#22d3ee;--bad:#ff5d7a}
 *{box-sizing:border-box}[hidden]{display:none!important}
 html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--tx);font:15px/1.45 "Trebuchet MS",system-ui,sans-serif}
-button,input{font:inherit;color:inherit}
-button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
-button:hover{border-color:var(--ac)}button:disabled{opacity:.4;cursor:not-allowed}
-button.pri{background:var(--ac);color:#1a1209;border-color:var(--ac);font-weight:700}
-button.off{color:var(--bad)}
-input[type=text],input:not([type]){background:#0f0d0b;border:1px solid var(--line);border-radius:8px;padding:9px 12px;width:100%}
-:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+body{color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;background:radial-gradient(900px 500px at 8% -10%,#3b2a9a55,transparent),radial-gradient(800px 500px at 100% 0,#0891b233,transparent),var(--bg);background-attachment:fixed}
+button,input,select{font:inherit;color:inherit}
+button{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer;transition:.15s}
+button:hover:not(:disabled){border-color:var(--ac2);transform:translateY(-1px)}button:disabled{opacity:.4;cursor:not-allowed}
+button.pri{background:linear-gradient(135deg,var(--ac),var(--ac2));border:0;color:#fff;font-weight:600}
+button.off{color:var(--bad);border-color:var(--bad)}
+input:not([type]),select{background:#0006;border:1px solid var(--line);border-radius:10px;padding:9px 12px;width:100%}
+select{width:auto}select option{color:#000}
+:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.logo{font:800 54px/1 system-ui,sans-serif;letter-spacing:-2px}.logo.sm{font-size:22px;letter-spacing:-1px}
+.logo span{background:linear-gradient(135deg,var(--ac),var(--ac2));-webkit-background-clip:text;background-clip:text;color:transparent}
 #land{min-height:100%;display:grid;place-items:center;padding:20px}
-.card{width:min(420px,100%);display:grid;gap:12px}
-.card h1{font:italic 700 56px/1 Georgia,serif;margin:0;letter-spacing:-1px}
-.card p{color:var(--mut);margin:0 0 8px}
-.or{color:var(--mut);text-align:center;font-size:13px}
+.card{width:min(420px,100%);display:grid;gap:12px;padding:28px;background:var(--card);border:1px solid var(--line);border-radius:20px;backdrop-filter:blur(14px)}
+.card p{color:var(--mut);margin:0 0 6px}
+.or{display:flex;align-items:center;gap:10px;color:var(--mut);font-size:13px}.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
 .row{display:flex;gap:8px}
-#app{height:100%;display:grid;grid-template-columns:1fr 330px;grid-template-rows:auto 1fr}
-header{grid-column:1/3;display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-header b{font:italic 700 20px Georgia,serif;margin-right:auto}
-#rc{color:var(--mut)}
-main{display:flex;flex-direction:column;min-height:0;padding:12px;gap:10px}
-#bar{display:flex;gap:8px;flex-wrap:wrap}#bar input{flex:1;min-width:180px}
-#stage{flex:1;min-height:240px;background:#000;border-radius:10px;position:relative;overflow:hidden;display:grid;place-items:center}
+#app{height:100%;display:grid;grid-template-columns:1fr 340px;grid-template-rows:auto 1fr}
+header{grid-column:1/3;display:flex;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+header .logo{margin-right:auto}
+.chip{font-size:13px;color:var(--mut);background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 12px}
+main{display:flex;flex-direction:column;min-height:0;padding:14px;gap:12px;overflow:auto}
+#bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}#bar input{flex:1;min-width:200px}
+#rdy{color:var(--ac2);font-size:13px}
+#stage{flex:1;min-height:260px;background:#000;border-radius:16px;position:relative;overflow:hidden;border:1px solid var(--line);box-shadow:0 20px 60px #0008}
 #stage>div{position:absolute;inset:0}
 #stage video,#stage iframe{width:100%;height:100%;border:0;background:#000}
-#ph{color:var(--mut);text-align:center;padding:20px;display:grid;place-items:center}
-select{background:#0f0d0b;border:1px solid var(--line);border-radius:8px;padding:8px;color:inherit}
-#rdy{color:var(--ac);align-self:center;font-size:13px}
+#ph{color:var(--mut);text-align:center;display:grid;place-items:center}#ph .big{font-size:44px}
 #rx{pointer-events:none;overflow:hidden;z-index:2}
-.fl{position:absolute;bottom:56px;font-size:34px;animation:fl 2.8s ease-out forwards}
+.fl{position:absolute;bottom:20px;font-size:34px;animation:fl 2.8s ease-out forwards}
 @keyframes fl{to{transform:translateY(-260px);opacity:0}}
 #stage>#ctl{inset:0 0 auto 0;height:auto;display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(#000c,transparent);opacity:0;transition:opacity .2s;z-index:3}
 #stage:hover #ctl,#ctl:focus-within{opacity:1}
-#ctl button{padding:4px 10px;background:#0008}#ctl input{width:110px;accent-color:var(--ac)}
-#reacts{display:flex;gap:6px}#reacts button{padding:4px 12px;font-size:18px;transition:transform .12s}#reacts button:active{transform:scale(1.3)}
-.tile{transition:border-color .2s}.tile:hover{border-color:var(--ac)}
-@media(prefers-reduced-motion:reduce){.fl{animation-duration:.01s}*{transition:none!important}}
-#tiles{display:flex;gap:8px;overflow-x:auto;min-height:0}
-.tile{position:relative;flex:0 0 150px;aspect-ratio:16/10;background:#0f0d0b;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+#ctl button{padding:4px 10px;background:#0008}#ctl input{width:110px;accent-color:var(--ac2)}
+#dock{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.sp{flex:1}
+#reacts{display:flex;gap:6px}#reacts button{padding:4px 11px;font-size:18px}#reacts button:active{transform:scale(1.3)}
+#tiles{display:flex;gap:10px;overflow-x:auto}
+.tile{position:relative;flex:0 0 150px;aspect-ratio:16/10;background:#0007;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
 .tile video{width:100%;height:100%;object-fit:cover}
-.tile span{position:absolute;left:6px;bottom:4px;font-size:12px;background:#000a;padding:1px 6px;border-radius:4px}
-aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.tile span{position:absolute;left:6px;bottom:4px;font-size:12px;background:#000a;padding:1px 8px;border-radius:99px}
+aside{background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;backdrop-filter:blur(14px)}
 .tabs{display:flex;border-bottom:1px solid var(--line)}
-.tabs button{flex:1;border:0;border-radius:0;background:none;border-bottom:2px solid transparent}
-.tabs button.on{border-bottom-color:var(--ac);color:var(--ac)}
-.pane{flex:1;min-height:0;display:flex;flex-direction:column;padding:10px;gap:8px;overflow:auto}
-#log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:6px}
-#log div{word-break:break-word}#log b{color:var(--ac);margin-right:6px}#log .sys{color:var(--mut);font-size:13px;font-style:italic}
-#ppl ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-#ppl li{display:flex;gap:6px;align-items:center}#ppl li span{flex:1}
-#ppl li button{padding:3px 8px;font-size:13px}
-.tag{font-size:12px;color:var(--ac)}
-.opt{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.opt small{color:var(--mut);display:block}
-#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ac);color:#1a1209;padding:9px 16px;border-radius:8px;font-weight:700;z-index:9}
-@media(max-width:800px){#app{grid-template-columns:1fr;grid-template-rows:auto auto 360px}header{grid-column:1}aside{border-left:0;border-top:1px solid var(--line)}#stage{min-height:220px}}
+.tabs button{flex:1;border:0;border-radius:0;background:none;border-bottom:2px solid transparent;transform:none!important}
+.tabs button.on{border-bottom-color:var(--ac2);color:var(--ac2)}
+.pane{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto}
+#log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px}
+#log div{word-break:break-word}#log b{color:var(--ac2);margin-right:6px}#log .sys{color:var(--mut);font-size:13px;font-style:italic}
+#ulist{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+#ulist li{display:flex;gap:6px;align-items:center}#ulist li span{flex:1}#ulist li button{padding:3px 9px;font-size:13px}
+.tag{font-size:12px;color:var(--ac2);font-style:normal}
+.opt{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.opt input{accent-color:var(--ac)}.opt small{color:var(--mut);display:block}
+#snd{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:8;box-shadow:0 8px 30px #000a}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#fff;color:#12142a;padding:10px 18px;border-radius:12px;font-weight:600;z-index:9;max-width:min(560px,92vw);box-shadow:0 8px 30px #0008}
+@media(hover:none){#ctl{opacity:1!important}}
+@media(max-width:800px){#app{grid-template-columns:1fr;grid-template-rows:auto auto 380px;height:auto;min-height:100%}header{grid-column:1}aside{border-left:0;border-top:1px solid var(--line)}main{overflow:visible}#stage{flex:none;aspect-ratio:16/9;min-height:0}}
+@media(prefers-reduced-motion:reduce){.fl{animation-duration:.01s}*{transition:none!important}}
 </style></head><body>
 
 <div id="land"><div class="card">
- <h1>Watchroom</h1>
- <p>Watch together. Free, peer-to-peer, no account needed.</p>
+ <div class="logo">Watch<span>room</span></div>
+ <p>Movie nights with friends. Free, private, peer-to-peer. No sign-up.</p>
  <input id="name" placeholder="Your name" maxlength="20" aria-label="Your name">
  <button id="create" class="pri">Create a room</button>
- <div class="or">or join a friend's room</div>
+ <div class="or">or join a friend</div>
  <div class="row"><input id="code" placeholder="Room code" aria-label="Room code"><button id="join">Join</button></div>
 </div></div>
 
 <div id="app" hidden>
- <header>
-  <b>Watchroom</b><span id="rc"></span>
-  <button id="copy">Copy invite link</button>
-  <button id="media">Start cam &amp; mic</button>
-  <button id="mic" hidden>Mic</button><button id="cmt" hidden>Cam</button>
- </header>
+ <header><div class="logo sm">Watch<span>room</span></div><span id="rc" class="chip"></span><span id="st" class="chip"></span><button id="copy">Copy invite link</button></header>
  <main>
   <div id="bar" hidden>
-   <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link">
-   <button id="loadyt">Play YouTube</button>
-   <button id="pick" class="pri">Stream a file</button>
-   <select id="q" aria-label="Stream quality"><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select>
-   <span id="rdy"></span>
-   <input type="file" id="file" accept="video/*,.mkv" hidden>
+   <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link"><button id="loadyt">Play YouTube</button>
+   <button id="pick" class="pri">Stream a file</button><input type="file" id="file" accept="video/*,.mkv" hidden>
+   <select id="q" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><span id="rdy"></span>
   </div>
   <div id="stage">
-   <div id="ph">Nothing playing yet. The host will start something shortly.</div>
+   <div id="ph"><div><div class="big">🍿</div>Nothing playing yet.<br>The host will start something shortly.</div></div>
    <div id="ytp" hidden><div id="yt"></div></div>
    <div id="fvp" hidden><video id="fv" controls playsinline></video></div>
    <div id="gvp" hidden><video id="gv" playsinline></video></div>
    <div id="rx"></div>
    <div id="ctl" hidden><label id="volw">Volume <input type="range" id="vol" min="0" max="1" step="0.05" value="1"></label><button id="fs">Fullscreen</button></div>
   </div>
-  <div id="reacts"><button>👍</button><button>😂</button><button>😮</button><button>❤️</button><button>👏</button><button>🔥</button></div>
+  <div id="dock">
+   <button id="media">Join voice &amp; video</button><button id="mic" hidden>Mic</button><button id="cmt" hidden>Camera</button>
+   <span class="sp"></span>
+   <div id="reacts"><button>👍</button><button>😂</button><button>😮</button><button>❤️</button><button>👏</button><button>🔥</button></div>
+  </div>
   <div id="tiles"></div>
  </main>
  <aside>
@@ -113,6 +111,7 @@ aside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-h
   </div>
  </aside>
 </div>
+<button id="snd" class="pri" hidden>Tap to enable sound</button>
 <div id="toast" hidden></div>
 
 <script>
@@ -123,7 +122,7 @@ const ready=new Set(),BR={1080:6e6,720:3.5e6,480:1.5e6};
 const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}};
 const send=(c,m)=>c&&c.open&&c.send(m);
 const bcast=(m,x)=>Object.values(conns).forEach(c=>c.peer!==x&&send(c,m));
-function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,3500)}
+function toast(t,ms=3500){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,ms)}
 
 /* ---------- connect ---------- */
 function start(host){
@@ -139,9 +138,9 @@ function start(host){
     if(host){sh($('#volw'),false);sh($('#bar'),true);sh($('#tabadm'),true);applySettings()}
     else{
       hostConn=peer.connect(room,{reliable:true});
-      hostConn.on('open',()=>send(hostConn,{t:'hello',name}));
+      hostConn.on('open',()=>{send(hostConn,{t:'hello',name});renderUsers()});
       hostConn.on('data',guestRecv);
-      hostConn.on('close',()=>toast('Disconnected from the room'));
+      hostConn.on('close',()=>{renderUsers();toast('Disconnected from the host')});
     }
   });
   peer.on('connection',c=>isHost&&hostAccept(c));
@@ -154,10 +153,10 @@ function hostAccept(c){
       if(S.locked){send(c,{t:'denied'});return setTimeout(()=>c.close(),400)}
       conns[c.peer]=c;users[c.peer]={name:String(d.name).slice(0,20)};
       send(c,{t:'init',users,S,mode,ytId});
-      bcast({t:'users',users});renderUsers();sys(users[c.peer].name+' joined');
+      bcast({t:'users',users});renderUsers();sys(users[c.peer].name+' joined');syncCalls();
       if(movieStream)callMovie(c.peer);
     }else if(conns[c.peer]){
-      if(d.t==='chat'&&S.chat){const m={t:'chat',from:users[c.peer].name,text:String(d.text).slice(0,500)};bcast(m);addChat(m)}
+      if(d.t==='chat'&&S.chat){const m={t:'chat',from:users[c.peer].name,text:String(d.text).slice(0,500)};bcast(m,c.peer);addChat(m)}
       if(d.t==='yt'&&S.control){applyYT(d);bcast(d,c.peer)}
       if(d.t==='react'&&S.react){bcast(d,c.peer);float(d.e)}
       if(d.t==='ready'){ready.add(c.peer);updReady()}
@@ -191,11 +190,17 @@ function addChat(m){
 }
 const sys=text=>addChat({sys:true,text});
 function sendChat(){
-  const i=$('#msg'),t=i.value.trim();if(!t)return;i.value='';
-  if(isHost){if(S.chat){const m={t:'chat',from:me.name,text:t};bcast(m);addChat(m)}}else send(hostConn,{t:'chat',text:t});
+  const i=$('#msg'),t=i.value.trim();if(!t)return;
+  if(isHost){const m={t:'chat',from:me.name,text:t};bcast(m);addChat(m)}
+  else{
+    if(!hostConn||!hostConn.open)return toast('Not connected to the host yet. Wait a moment and try again.');
+    if(!S.chat)return;addChat({from:me.name,text:t});send(hostConn,{t:'chat',text:t});
+  }
+  i.value='';
 }
 function renderUsers(){
   const ul=$('#ulist');ul.innerHTML='';updReady();
+  $('#st').textContent=isHost?'● '+Object.keys(conns).length+' watching':(hostConn&&hostConn.open?'● Connected':'● Connecting…');
   for(const id in users){
     const li=document.createElement('li'),s=document.createElement('span');
     s.textContent=users[id].name+(id===me.id?' (you)':'');li.append(s);
@@ -227,13 +232,15 @@ function applySettings(){
 function setTrack(kind,on){if(local)(kind==='audio'?local.getAudioTracks():local.getVideoTracks()).forEach(t=>t.enabled=on)}
 $('#media').onclick=async()=>{
   try{
-    local=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:24}},audio:{echoCancellation:true,noiseSuppression:true}});
+    const gum=o=>navigator.mediaDevices.getUserMedia(o),A={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+    try{local=await gum({video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:24}},audio:A})}
+    catch{local=await gum({audio:A});toast('No camera available. Joined with mic only.')}
     addTile(me.id,local,true);sh($('#media'),false);sh($('#mic'),true);sh($('#cmt'),true);applySettings();syncCalls();
   }catch{toast('Allow camera and microphone access to join the call')}
 };
 function toggle(btn,kind){
   const t=(kind==='audio'?local.getAudioTracks():local.getVideoTracks())[0];if(!t)return;
-  t.enabled=!t.enabled;btn.classList.toggle('off',!t.enabled);
+  t.enabled=!t.enabled;btn.classList.toggle('off',!t.enabled);btn.textContent=(kind==='audio'?'Mic':'Camera')+(t.enabled?'':' off');
 }
 $('#mic').onclick=e=>toggle(e.target,'audio');$('#cmt').onclick=e=>toggle(e.target,'video');
 function callCam(id){
@@ -245,7 +252,7 @@ function onCall(call){
   const t=call.metadata&&call.metadata.type;
   if(t==='movie'){
     call.answer();
-    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.play().catch(()=>{g.muted=true;g.play();toast('Tap the video to unmute')});smooth(call);send(hostConn,{t:'ready'})});
+    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.muted=false;g.play().catch(()=>{g.muted=true;g.play();sh($('#snd'),true)});smooth(call);send(hostConn,{t:'ready'})});
   }else{
     call.answer(local||undefined);if(local)setTimeout(()=>capCam(call),1000);
     call.on('stream',s=>addTile(call.peer,s));call.on('close',()=>dropTile(call.peer));
@@ -255,11 +262,11 @@ function addTile(id,s,self){
   let t=document.querySelector('.tile[data-id="'+id+'"]');
   if(!t){
     t=document.createElement('div');t.className='tile';t.dataset.id=id;
-    const v=document.createElement('video');v.autoplay=true;v.playsInline=true;v.muted=!!self;
+    const v=document.createElement('video');v.autoplay=true;v.playsInline=true;v.muted=!!self;v.dataset.self=self?1:0;
     const l=document.createElement('span');l.textContent=self?'You':(users[id]?users[id].name:'Guest');
     t.append(v,l);$('#tiles').append(t);
   }
-  t.querySelector('video').srcObject=s;
+  const v=t.querySelector('video');v.srcObject=s;v.play().catch(()=>sh($('#snd'),true));
 }
 function dropTile(id){const t=document.querySelector('.tile[data-id="'+id+'"]');t&&t.remove()}
 function dropPeer(id){dropTile(id);['cam:','movie:'].forEach(p=>{if(calls[p+id]){calls[p+id].close();delete calls[p+id]}})}
@@ -296,8 +303,9 @@ function loadYT(id){
 }
 function applyYT(m){
   if(!ytOK)return;applying=true;
-  if(Math.abs(yt.getCurrentTime()-m.time)>1.5)yt.seekTo(m.time,true);
+  if(Math.abs(yt.getCurrentTime()-m.time)>2.5)yt.seekTo(m.time,true);
   const st=yt.getPlayerState(),pause=m.a==='pause'||(m.a==='sync'&&!m.playing);
+  if(m.a==='sync'&&st===3)return applying=false;
   if(pause){if(st===1)yt.pauseVideo()}else if(st!==1)yt.playVideo();
   setTimeout(()=>applying=false,1000);
 }
@@ -316,7 +324,11 @@ $('#file').onchange=async e=>{
   try{await v.play()}catch{}
   const cap=v.captureStream||v.mozCaptureStream;
   if(!cap)return toast('Use Chrome, Edge or Firefox to stream files');
-  movieStream=cap.call(v);ready.clear();v.pause();v.currentTime=0;Object.keys(conns).forEach(callMovie);updReady();toast('Ready to stream. Press play once everyone shows as ready.');
+  movieStream=cap.call(v);ready.clear();Object.keys(conns).forEach(callMovie);updReady();
+  await new Promise(r=>setTimeout(r,1800));
+  const bad=!movieStream.getAudioTracks().length||v.webkitAudioDecodedByteCount===0||v.mozHasAudio===false;
+  v.pause();v.currentTime=0;
+  toast(bad?'No sound: your browser cannot decode this file\'s audio (AC3/DTS). Convert the audio to AAC: ffmpeg -i movie.mkv -c:v copy -c:a aac movie.mp4':'Ready. Press play once everyone shows as ready.',bad?15000:4000);
 };
 function callMovie(id){
   if(!movieStream)return;
@@ -330,7 +342,7 @@ function boost(c){ /* cap bitrate by chosen quality; balanced mode drops frames 
     s.track.contentHint='motion';
     const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];
     p.encodings[0].maxBitrate=BR[q];p.encodings[0].scaleResolutionDownBy=Math.max(1,h/q);p.encodings[0].maxFramerate=30;
-    p.degradationPreference='balanced';s.setParameters(p).catch(()=>{});
+    p.degradationPreference='balanced';p.encodings[0].priority='high';p.encodings[0].networkPriority='high';s.setParameters(p).catch(()=>{});
   })}catch{}
 }
 function stopMovie(){
@@ -357,6 +369,8 @@ $('#q').onchange=()=>Object.keys(calls).filter(k=>k.startsWith('movie:')).forEac
 $('#fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():$('#stage').requestFullscreen();
 $('#vol').oninput=e=>{$('#gv').volume=+e.target.value;$('#gv').muted=false};
 $('#gv').onclick=()=>{$('#gv').muted=false};
+
+$('#snd').onclick=()=>{document.querySelectorAll('.tile video,#gv').forEach(v=>{v.muted=v.dataset.self==='1';v.play().catch(()=>{})});sh($('#snd'),false)};
 
 /* ---------- wiring ---------- */
 $('#create').onclick=()=>start(true);$('#join').onclick=()=>start(false);
