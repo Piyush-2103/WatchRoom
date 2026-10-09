@@ -3,87 +3,105 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Watchroom</title>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
 <style>
-:root{--bg:#090c1c;--card:#ffffff0d;--line:#ffffff1c;--tx:#eef0ff;--mut:#9aa3cf;--ac:#7c5cff;--ac2:#22d3ee;--bad:#ff5d7a}
+:root{--bg:#0a0607;--vel:#7d1224;--vel2:#3a0610;--gold:#e9b44c;--gold2:#a77a1e;--cream:#f6ecd6;--mut:#b9a98c;--line:#e9b44c33;--bad:#ff7b7b}
 *{box-sizing:border-box}[hidden]{display:none!important}
 html,body{height:100%;margin:0}
-body{color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;background:radial-gradient(900px 500px at 8% -10%,#3b2a9a55,transparent),radial-gradient(800px 500px at 100% 0,#0891b233,transparent),var(--bg);background-attachment:fixed}
+body{color:var(--cream);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;background:radial-gradient(ellipse at 50% -10%,#3a1017,var(--bg) 62%) fixed}
+body::before,body::after{content:"";position:fixed;top:0;bottom:0;width:72px;z-index:0;pointer-events:none;background:repeating-linear-gradient(90deg,var(--vel2) 0,var(--vel) 16px,var(--vel2) 32px);box-shadow:inset 0 0 40px #000}
+body::before{left:0;border-right:2px solid var(--gold2)}body::after{right:0;border-left:2px solid var(--gold2)}
 button,input,select{font:inherit;color:inherit}
-button{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer;transition:.15s}
-button:hover:not(:disabled){border-color:var(--ac2);transform:translateY(-1px)}button:disabled{opacity:.4;cursor:not-allowed}
-button.pri{background:linear-gradient(135deg,var(--ac),var(--ac2));border:0;color:#fff;font-weight:600}
+button{background:#ffffff0a;border:1px solid var(--gold2);color:var(--gold);border-radius:8px;padding:8px 14px;cursor:pointer;transition:.15s}
+button:hover:not(:disabled){background:#e9b44c22;box-shadow:0 0 14px #e9b44c44}button:disabled{opacity:.4;cursor:not-allowed}
+button.pri{background:linear-gradient(#f6cf78,#d49a2b);border:0;color:#2a1604;font-weight:700}
 button.off{color:var(--bad);border-color:var(--bad)}
-input:not([type]),select{background:#0006;border:1px solid var(--line);border-radius:10px;padding:9px 12px;width:100%}
+input:not([type]),select{background:#0009;border:1px solid var(--line);border-radius:8px;padding:9px 12px;width:100%;color:var(--cream)}
 select{width:auto}select option{color:#000}
-:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
-.logo{font:800 54px/1 system-ui,sans-serif;letter-spacing:-2px}.logo.sm{font-size:22px;letter-spacing:-1px}
-.logo span{background:linear-gradient(135deg,var(--ac),var(--ac2));-webkit-background-clip:text;background-clip:text;color:transparent}
-#land{min-height:100%;display:grid;place-items:center;padding:20px}
-.card{width:min(420px,100%);display:grid;gap:12px;padding:28px;background:var(--card);border:1px solid var(--line);border-radius:20px;backdrop-filter:blur(14px)}
-.card p{color:var(--mut);margin:0 0 6px}
-.or{display:flex;align-items:center;gap:10px;color:var(--mut);font-size:13px}.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.logo{font:400 46px/1 Impact,"Arial Narrow Bold",sans-serif;letter-spacing:6px;text-transform:uppercase;color:var(--gold);text-shadow:0 0 14px #e9b44c88,0 0 34px #e9b44c44}
+.logo span{color:#fff6dd}.logo.sm{font-size:24px;letter-spacing:4px}
+#land{min-height:100%;display:grid;place-items:center;padding:20px;position:relative;z-index:1}
+.wrap{display:grid;gap:26px;justify-items:center;width:min(440px,100%)}
+.card{width:100%;display:grid;gap:12px;padding:30px 28px;background:linear-gradient(#f6ecd6,#e6d5ab);color:#2a1604;border-radius:10px;box-shadow:0 20px 60px #000c;
+ -webkit-mask:radial-gradient(circle 13px at 0 62%,#0000 98%,#000) left/51% 100% no-repeat,radial-gradient(circle 13px at 100% 62%,#0000 98%,#000) right/51% 100% no-repeat;mask:radial-gradient(circle 13px at 0 62%,#0000 98%,#000) left/51% 100% no-repeat,radial-gradient(circle 13px at 100% 62%,#0000 98%,#000) right/51% 100% no-repeat}
+.card h2{margin:0;font:400 13px Impact,sans-serif;letter-spacing:6px;color:var(--vel)}
+.card p{margin:0 0 6px;color:#5a4426}
+.card input:not([type]){background:#fff9;color:#2a1604;border-color:#a77a1e88}
+.card button:not(.pri){color:var(--vel);border-color:var(--vel)}
+.or{display:flex;align-items:center;gap:10px;color:#7a6234;font-size:12px;letter-spacing:2px;text-transform:uppercase}.or:before,.or:after{content:"";flex:1;border-top:2px dashed #a77a1e88}
 .row{display:flex;gap:8px}
-#app{height:100%;display:grid;grid-template-columns:1fr 340px;grid-template-rows:auto 1fr}
-header{grid-column:1/3;display:flex;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+#app{height:100%;display:grid;grid-template-columns:1fr 340px;grid-template-rows:auto 1fr;margin:0 72px;position:relative;z-index:1}
+header{grid-column:1/3;position:relative;display:flex;gap:10px;align-items:center;padding:14px 4px 24px}
 header .logo{margin-right:auto}
-.chip{font-size:13px;color:var(--mut);background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 12px}
-main{display:flex;flex-direction:column;min-height:0;padding:14px;gap:12px;overflow:auto}
+header:after{content:"";position:absolute;left:0;right:0;bottom:6px;height:10px;background:radial-gradient(circle,#ffe08a 0 3px,transparent 4px) 0 0/24px 10px repeat-x;filter:drop-shadow(0 0 4px #ffcc55);animation:tw 2s steps(2) infinite}
+@keyframes tw{50%{opacity:.5}}
+.chip{font-size:13px;color:var(--mut);border:1px solid var(--line);border-radius:99px;padding:3px 12px;background:#0006}
+main{display:flex;flex-direction:column;min-height:0;padding:4px 14px 14px 4px;gap:12px;overflow:auto}
 #bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}#bar input{flex:1;min-width:200px}
-#rdy{color:var(--ac2);font-size:13px}
-#stage{flex:1;min-height:260px;background:#000;border-radius:16px;position:relative;overflow:hidden;border:1px solid var(--line);box-shadow:0 20px 60px #0008}
+#rdy{color:var(--gold);font-size:13px}
+#stage{flex:1;min-height:260px;background:#000;border-radius:6px;position:relative;overflow:hidden;border:4px solid #1b1315;box-shadow:0 0 0 2px var(--gold2),0 0 90px 12px #ffd98026,0 30px 80px #000}
 #stage>div{position:absolute;inset:0}
 #stage video,#stage iframe{width:100%;height:100%;border:0;background:#000}
-#ph{color:var(--mut);text-align:center;display:grid;place-items:center}#ph .big{font-size:44px}
+#ph{color:var(--mut);text-align:center;display:grid;place-items:center;background:radial-gradient(ellipse at center,#2a1a12,#000 70%)}#ph .big{font-size:48px}
 #rx{pointer-events:none;overflow:hidden;z-index:2}
 .fl{position:absolute;bottom:20px;font-size:34px;animation:fl 2.8s ease-out forwards}
 @keyframes fl{to{transform:translateY(-260px);opacity:0}}
 #stage>#ctl{inset:0 0 auto 0;height:auto;display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(#000c,transparent);opacity:0;transition:opacity .2s;z-index:3}
 #stage:hover #ctl,#ctl:focus-within{opacity:1}
-#ctl button{padding:4px 10px;background:#0008}#ctl input{width:110px;accent-color:var(--ac2)}
+#ctl button{padding:4px 10px;background:#0008}#ctl input{width:110px;accent-color:var(--gold)}
 #dock{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.sp{flex:1}
 #reacts{display:flex;gap:6px}#reacts button{padding:4px 11px;font-size:18px}#reacts button:active{transform:scale(1.3)}
-#tiles{display:flex;gap:10px;overflow-x:auto}
-.tile{position:relative;flex:0 0 150px;aspect-ratio:16/10;background:#0007;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+#tiles{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.tile{position:relative;flex:0 0 150px;aspect-ratio:16/10;background:var(--vel2);border-radius:12px 12px 4px 4px;overflow:hidden;border:2px solid #5a1c26}
 .tile video{width:100%;height:100%;object-fit:cover}
-.tile span{position:absolute;left:6px;bottom:4px;font-size:12px;background:#000a;padding:1px 8px;border-radius:99px}
-aside{background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;backdrop-filter:blur(14px)}
+.tile span{position:absolute;left:6px;bottom:4px;font-size:12px;background:#000b;padding:1px 8px;border-radius:99px}
+aside{background:linear-gradient(#1c0d10,#120709);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0;margin:0 0 14px;overflow:hidden}
 .tabs{display:flex;border-bottom:1px solid var(--line)}
-.tabs button{flex:1;border:0;border-radius:0;background:none;border-bottom:2px solid transparent;transform:none!important}
-.tabs button.on{border-bottom-color:var(--ac2);color:var(--ac2)}
+.tabs button{flex:1;border:0;border-radius:0;background:none;border-bottom:2px solid transparent;color:var(--mut);box-shadow:none!important}
+.tabs button.on{border-bottom-color:var(--gold);color:var(--gold)}
 .pane{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px;gap:10px;overflow:auto}
 #log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px}
-#log div{word-break:break-word}#log b{color:var(--ac2);margin-right:6px}#log .sys{color:var(--mut);font-size:13px;font-style:italic}
+#log div{word-break:break-word}#log b{color:var(--gold);margin-right:6px}#log .sys{color:var(--mut);font-size:13px;font-style:italic}
+#cf{display:flex;gap:8px}
 #ulist{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 #ulist li{display:flex;gap:6px;align-items:center}#ulist li span{flex:1}#ulist li button{padding:3px 9px;font-size:13px}
-.tag{font-size:12px;color:var(--ac2);font-style:normal}
+.tag{font-size:12px;color:var(--gold);font-style:normal}
 .opt{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
-.opt input{accent-color:var(--ac)}.opt small{color:var(--mut);display:block}
+.opt input{accent-color:var(--gold)}.opt small{color:var(--mut);display:block}
 #snd{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:8;box-shadow:0 8px 30px #000a}
-#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#fff;color:#12142a;padding:10px 18px;border-radius:12px;font-weight:600;z-index:9;max-width:min(560px,92vw);box-shadow:0 8px 30px #0008}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--cream);color:#2a1604;padding:10px 18px;border-radius:10px;font-weight:600;z-index:9;max-width:min(560px,92vw);box-shadow:0 8px 30px #000a}
+body.theatre #app{grid-template-columns:1fr}body.theatre aside{display:none}
+body.theatre header,body.theatre #dock,body.theatre #tiles,body.theatre #bar{opacity:.3;transition:opacity .3s}
+body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,body.theatre #bar:hover{opacity:1}
 @media(hover:none){#ctl{opacity:1!important}}
-@media(max-width:800px){#app{grid-template-columns:1fr;grid-template-rows:auto auto 380px;height:auto;min-height:100%}header{grid-column:1}aside{border-left:0;border-top:1px solid var(--line)}main{overflow:visible}#stage{flex:none;aspect-ratio:16/9;min-height:0}}
-@media(prefers-reduced-motion:reduce){.fl{animation-duration:.01s}*{transition:none!important}}
+@media(max-width:800px){body::before,body::after{display:none}#app{grid-template-columns:1fr;grid-template-rows:auto auto 400px;height:auto;min-height:100%;margin:0 10px}header{grid-column:1;flex-wrap:wrap}main{overflow:visible;padding:4px 0}#stage{flex:none;aspect-ratio:16/9;min-height:0}.logo{font-size:36px}}
+@media(prefers-reduced-motion:reduce){.fl,header:after{animation:none}*{transition:none!important}}
 </style></head><body>
 
-<div id="land"><div class="card">
+<div id="land"><div class="wrap">
  <div class="logo">Watch<span>room</span></div>
- <p>Movie nights with friends. Free, private, peer-to-peer. No sign-up.</p>
- <input id="name" placeholder="Your name" maxlength="20" aria-label="Your name">
- <button id="create" class="pri">Create a room</button>
- <div class="or">or join a friend</div>
- <div class="row"><input id="code" placeholder="Room code" aria-label="Room code"><button id="join">Join</button></div>
+ <div class="card">
+  <h2>ADMIT ONE</h2>
+  <p>Movie night with friends. Free, private, peer-to-peer. No sign-up.</p>
+  <input id="name" placeholder="Your name" maxlength="20" aria-label="Your name">
+  <button id="create" class="pri">Open a screening room</button>
+  <div class="or">or</div>
+  <div class="row"><input id="code" placeholder="Room code" aria-label="Room code"><button id="join">Join</button></div>
+ </div>
 </div></div>
 
 <div id="app" hidden>
- <header><div class="logo sm">Watch<span>room</span></div><span id="rc" class="chip"></span><span id="st" class="chip"></span><button id="copy">Copy invite link</button></header>
+ <header><div class="logo sm">Watch<span>room</span></div><span id="rc" class="chip"></span><span id="st" class="chip"></span><button id="theatre">Theatre mode</button><button id="copy">Copy invite link</button></header>
  <main>
   <div id="bar" hidden>
    <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link"><button id="loadyt">Play YouTube</button>
-   <button id="pick" class="pri">Stream a file</button><input type="file" id="file" accept="video/*,.mkv" hidden>
-   <select id="q" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><span id="rdy"></span>
+   <button id="pick" class="pri">Choose movie</button><input type="file" id="file" accept="video/*,audio/*,.mkv,.m4a,.mka" multiple hidden>
+   <select id="q" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><button id="fix" class="pri" hidden>Fix audio</button><span id="rdy"></span>
   </div>
   <div id="stage">
-   <div id="ph"><div><div class="big">🍿</div>Nothing playing yet.<br>The host will start something shortly.</div></div>
+   <div id="ph"><div><div class="big">🎬</div>The screen is dark.<br>The host will start the show shortly.</div></div>
    <div id="ytp" hidden><div id="yt"></div></div>
    <div id="fvp" hidden><video id="fv" controls playsinline></video></div>
    <div id="gvp" hidden><video id="gv" playsinline></video></div>
@@ -96,10 +114,11 @@ aside{background:var(--card);border-left:1px solid var(--line);display:flex;flex
    <div id="reacts"><button>👍</button><button>😂</button><button>😮</button><button>❤️</button><button>👏</button><button>🔥</button></div>
   </div>
   <div id="tiles"></div>
+  <audio id="fa" preload="auto"></audio>
  </main>
  <aside>
-  <div class="tabs"><button data-tab="chat" id="tabchat" class="on">Chat</button><button data-tab="ppl">People</button><button data-tab="adm" id="tabadm" hidden>Host</button></div>
-  <div class="pane" id="chat"><div id="log"></div><input id="msg" placeholder="Message…" maxlength="500" aria-label="Message"></div>
+  <div class="tabs"><button data-tab="chat" id="tabchat" class="on">Chat</button><button data-tab="ppl">Audience</button><button data-tab="adm" id="tabadm" hidden>Host</button></div>
+  <div class="pane" id="chat"><div id="log"></div><form id="cf" autocomplete="off"><input id="msg" placeholder="Say something…" maxlength="500" aria-label="Message"><button class="pri">Send</button></form></div>
   <div class="pane" id="ppl" hidden><ul id="ulist"></ul></div>
   <div class="pane" id="adm" hidden>
    <label class="opt"><input type="checkbox" id="s-chat"><div>Chat<small>Let guests send messages</small></div></label>
@@ -194,7 +213,7 @@ function sendChat(){
   if(isHost){const m={t:'chat',from:me.name,text:t};bcast(m);addChat(m)}
   else{
     if(!hostConn||!hostConn.open)return toast('Not connected to the host yet. Wait a moment and try again.');
-    if(!S.chat)return;addChat({from:me.name,text:t});send(hostConn,{t:'chat',text:t});
+    if(!S.chat)return toast('The host turned chat off');addChat({from:me.name,text:t});send(hostConn,{t:'chat',text:t});
   }
   i.value='';
 }
@@ -219,7 +238,7 @@ $('#ulist').onclick=e=>{
 
 /* ---------- admin settings ---------- */
 function applySettings(){
-  document.querySelectorAll('#reacts button').forEach(b=>b.disabled=!isHost&&!S.react);$('#msg').disabled=!S.chat&&!isHost;$('#msg').placeholder=S.chat?'Message…':'Chat is off';
+  document.querySelectorAll('#reacts button').forEach(b=>b.disabled=!isHost&&!S.react);$('#msg').readOnly=!S.chat&&!isHost;$('#msg').placeholder=S.chat||isHost?'Say something…':'Chat is turned off by the host';
   if(!isHost){
     if(!S.mic)setTrack('audio',false);if(!S.cam)setTrack('video',false);
     $('#mic').disabled=!S.mic;$('#cmt').disabled=!S.cam;
@@ -318,18 +337,35 @@ $('#loadyt').onclick=()=>{
 
 /* Local file -> everyone (host's browser re-streams it over WebRTC) */
 $('#pick').onclick=()=>$('#file').click();
-$('#file').onchange=async e=>{
-  const f=e.target.files[0];if(!f)return;
-  stopMovie();const v=$('#fv');v.src=URL.createObjectURL(f);hostMode('file');
+let lastFile=null,sc=null;
+const isAud=f=>/^audio\//.test(f.type)||/\.(m4a|aac|mka|opus|mp3|ogg|wav|flac)$/i.test(f.name);
+$('#file').onchange=e=>loadFiles([...e.target.files]);
+function sideStream(a){ /* plays the separate audio file here AND feeds it into the stream guests receive */
+  if(!sc){const ac=new (window.AudioContext||window.webkitAudioContext)(),src=ac.createMediaElementSource(a),dst=ac.createMediaStreamDestination(),g=ac.createGain();src.connect(dst);src.connect(g);g.connect(ac.destination);sc={ac,dst,g}}
+  sc.ac.resume();return sc.dst.stream;
+}
+function syncAudio(v,a){
+  const go=()=>{a.currentTime=v.currentTime;a.play().catch(()=>{})};
+  v.onplay=v.onplaying=go;v.onpause=v.onwaiting=()=>a.pause();v.onseeked=()=>{a.currentTime=v.currentTime};v.onratechange=()=>{a.playbackRate=v.playbackRate};
+  syncAudio.t=setInterval(()=>{if(!v.paused&&Math.abs(a.currentTime-v.currentTime)>.25)a.currentTime=v.currentTime},1000);
+}
+async function loadFiles(list){
+  const aud=list.find(isAud),f=list.find(x=>!isAud(x));
+  if(!f)return toast('Choose the movie file. You can also pick a saved fixed-audio file together with it.');
+  lastFile=f;sh($('#fix'),false);stopMovie();
+  const v=$('#fv'),a=$('#fa');v.src=URL.createObjectURL(f);v.muted=!!aud;hostMode('file');sh($('#volw'),!!aud);
+  let side=null;if(aud){a.src=URL.createObjectURL(aud);side=sideStream(a);syncAudio(v,a)}
   try{await v.play()}catch{}
   const cap=v.captureStream||v.mozCaptureStream;
   if(!cap)return toast('Use Chrome, Edge or Firefox to stream files');
-  movieStream=cap.call(v);ready.clear();Object.keys(conns).forEach(callMovie);updReady();
+  const vs=cap.call(v);movieStream=aud?new MediaStream([...vs.getVideoTracks(),...side.getAudioTracks()]):vs;
+  ready.clear();Object.keys(conns).forEach(callMovie);updReady();
   await new Promise(r=>setTimeout(r,1800));
-  const bad=!movieStream.getAudioTracks().length||v.webkitAudioDecodedByteCount===0||v.mozHasAudio===false;
+  const bad=!aud&&(!movieStream.getAudioTracks().length||v.webkitAudioDecodedByteCount===0||v.mozHasAudio===false);
   v.pause();v.currentTime=0;
-  toast(bad?'No sound: your browser cannot decode this file\'s audio (AC3/DTS). Convert the audio to AAC: ffmpeg -i movie.mkv -c:v copy -c:a aac movie.mp4':'Ready. Press play once everyone shows as ready.',bad?15000:4000);
-};
+  toast(bad?'No sound: your browser can\'t decode this movie\'s audio (AC3/DTS). Press "Fix audio". It extracts only the audio, not the whole movie, and asks where to save it.':'Ready. Press play once everyone shows as ready.',bad?15000:4000);
+  sh($('#fix'),bad);
+}
 function callMovie(id){
   if(!movieStream)return;
   const c=peer.call(id,movieStream,{metadata:{type:'movie'}});calls['movie:'+id]=c;
@@ -347,7 +383,7 @@ function boost(c){ /* cap bitrate by chosen quality; balanced mode drops frames 
 }
 function stopMovie(){
   Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>{calls[k].close();delete calls[k]});
-  movieStream=null;ready.clear();updReady();const v=$('#fv');v.pause();v.removeAttribute('src');v.load();
+  movieStream=null;ready.clear();updReady();clearInterval(syncAudio.t);$('#fa').pause();const v=$('#fv');v.onplay=v.onplaying=v.onpause=v.onwaiting=v.onseeked=v.onratechange=null;v.pause();v.removeAttribute('src');v.load();
 }
 
 /* ---------- ready gate, reactions, playback smoothing ---------- */
@@ -367,14 +403,43 @@ function capCam(c){try{c.peerConnection.getSenders().forEach(s=>{if(s.track&&s.t
   const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];p.encodings[0].maxBitrate=4e5;s.setParameters(p).catch(()=>{})}})}catch{}}
 $('#q').onchange=()=>Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>boost(calls[k]));
 $('#fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():$('#stage').requestFullscreen();
-$('#vol').oninput=e=>{$('#gv').volume=+e.target.value;$('#gv').muted=false};
+$('#vol').oninput=e=>{const x=+e.target.value;$('#gv').volume=x;$('#gv').muted=false;if(sc)sc.g.gain.value=x};
 $('#gv').onclick=()=>{$('#gv').muted=false};
 
 $('#snd').onclick=()=>{document.querySelectorAll('.tile video,#gv').forEach(v=>{v.muted=v.dataset.self==='1';v.play().catch(()=>{})});sh($('#snd'),false)};
 
+/* In-browser audio fix: copy the video untouched, re-encode only the audio to AAC (ffmpeg.wasm, runs locally) */
+async function fixAudio(){
+  const f=lastFile;if(!f)return;
+  const name=f.name.replace(/\.\w+$/,'')+' (fixed audio).m4a',r=$('#rdy'),b=$('#fix');
+  let h=null; /* choose the save location first (needs a fresh click); the result goes straight to disk, not browser memory */
+  if(window.showSaveFilePicker){try{h=await showSaveFilePicker({suggestedName:name,types:[{description:'AAC audio',accept:{'audio/mp4':['.m4a']}}]})}catch(e){if(e.name==='AbortError')return}}
+  b.disabled=true;
+  try{
+    r.textContent='Loading converter (one-time, ~30 MB)…';
+    const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil;
+    ff.on('progress',({progress})=>r.textContent='Extracting audio… '+Math.max(0,Math.min(99,Math.round(progress*100)))+'% (a 3 GB movie takes several minutes)');
+    const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
+    await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
+    const src=new File([f],'input.'+(f.name.split('.').pop()||'mkv'));
+    await ff.mount('WORKERFS',{files:[src]},'/in'); /* streams the movie from disk, never loads all 3 GB */
+    const code=await ff.exec(['-i','/in/'+src.name,'-map','0:a:0','-vn','-c:a','aac','-b:a','160k','-ac','2','out.m4a']);
+    if(code)throw new Error('this file has no convertible audio track (exit '+code+')');
+    const data=await ff.readFile('out.m4a');ff.terminate();
+    let out=new File([data],name,{type:'audio/mp4'});
+    if(h){const w=await h.createWritable();await w.write(data);await w.close();out=await h.getFile()}
+    else{const x=document.createElement('a');x.href=URL.createObjectURL(out);x.download=name;x.click()}
+    r.textContent='';toast('Audio saved to your computer. Next time choose the movie and this .m4a together to skip conversion.',9000);
+    await loadFiles([f,out]);
+  }catch(e){r.textContent='';toast('Conversion failed: '+(e.message||e),9000)}
+  b.disabled=false;
+}
+$('#fix').onclick=fixAudio;
+
 /* ---------- wiring ---------- */
 $('#create').onclick=()=>start(true);$('#join').onclick=()=>start(false);
-$('#msg').onkeydown=e=>e.key==='Enter'&&sendChat();
+$('#cf').onsubmit=e=>{e.preventDefault();sendChat();$('#msg').focus()};
+$('#theatre').onclick=()=>document.body.classList.toggle('theatre');
 $('#copy').onclick=()=>navigator.clipboard.writeText(invite).then(()=>toast('Invite link copied'));
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
