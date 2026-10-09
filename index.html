@@ -72,6 +72,12 @@ aside{background:linear-gradient(#1c0d10,#120709);border:1px solid var(--line);b
 .opt input{accent-color:var(--gold)}.opt small{color:var(--mut);display:block}
 #snd{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:8;box-shadow:0 8px 30px #000a}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--cream);color:#2a1604;padding:10px 18px;border-radius:10px;font-weight:600;z-index:9;max-width:min(560px,92vw);box-shadow:0 8px 30px #000a}
+#cv{display:flex;align-items:center;gap:12px}
+#cv .trk{flex:1;height:12px;border-radius:99px;background:#0009;border:1px solid var(--gold2);overflow:hidden}
+#cvb{height:100%;width:0;background:linear-gradient(90deg,#a77a1e,#f6cf78);box-shadow:0 0 12px #e9b44c;transition:width .4s}
+#cv.ind #cvb{background:repeating-linear-gradient(45deg,#e9b44c 0 12px,#a77a1e 12px 24px);background-size:34px 34px;animation:st 1s linear infinite}
+@keyframes st{to{background-position:34px 0}}
+#cvt{font-size:13px;color:var(--gold);white-space:nowrap}
 body.theatre #app{grid-template-columns:1fr}body.theatre aside{display:none}
 body.theatre header,body.theatre #dock,body.theatre #tiles,body.theatre #bar{opacity:.3;transition:opacity .3s}
 body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,body.theatre #bar:hover{opacity:1}
@@ -100,13 +106,14 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
    <button id="pick" class="pri">Choose movie</button><input type="file" id="file" accept="video/*,audio/*,.mkv,.m4a,.mka" multiple hidden>
    <select id="q" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><button id="fix" class="pri" hidden>Fix audio</button><span id="rdy"></span>
   </div>
+  <div id="cv" hidden><div class="trk"><div id="cvb"></div></div><span id="cvt"></span></div>
   <div id="stage">
    <div id="ph"><div><div class="big">🎬</div>The screen is dark.<br>The host will start the show shortly.</div></div>
    <div id="ytp" hidden><div id="yt"></div></div>
    <div id="fvp" hidden><video id="fv" controls playsinline></video></div>
    <div id="gvp" hidden><video id="gv" playsinline></video></div>
    <div id="rx"></div>
-   <div id="ctl" hidden><label id="volw">Volume <input type="range" id="vol" min="0" max="1" step="0.05" value="1"></label><button id="fs">Fullscreen</button></div>
+   <div id="ctl" hidden><button id="fs">Fullscreen</button></div>
   </div>
   <div id="dock">
    <button id="media">Join voice &amp; video</button><button id="mic" hidden>Mic</button><button id="cmt" hidden>Camera</button>
@@ -154,7 +161,7 @@ function start(host){
     me={id,name};users[id]={name,host};
     const room=host?id:code;invite=location.href.split('#')[0]+'#'+room;
     $('#land').hidden=true;$('#app').hidden=false;$('#rc').textContent='Room '+room;
-    if(host){sh($('#volw'),false);sh($('#bar'),true);sh($('#tabadm'),true);applySettings()}
+    if(host){sh($('#bar'),true);sh($('#tabadm'),true);applySettings()}
     else{
       hostConn=peer.connect(room,{reliable:true});
       hostConn.on('open',()=>{send(hostConn,{t:'hello',name});renderUsers()});
@@ -353,7 +360,7 @@ async function loadFiles(list){
   const aud=list.find(isAud),f=list.find(x=>!isAud(x));
   if(!f)return toast('Choose the movie file. You can also pick a saved fixed-audio file together with it.');
   lastFile=f;sh($('#fix'),false);stopMovie();
-  const v=$('#fv'),a=$('#fa');v.src=URL.createObjectURL(f);v.muted=!!aud;hostMode('file');sh($('#volw'),!!aud);
+  const v=$('#fv'),a=$('#fa');v.src=URL.createObjectURL(f);v.muted=!!aud;hostMode('file');
   let side=null;if(aud){a.src=URL.createObjectURL(aud);side=sideStream(a);syncAudio(v,a)}
   try{await v.play()}catch{}
   const cap=v.captureStream||v.mozCaptureStream;
@@ -403,12 +410,14 @@ function capCam(c){try{c.peerConnection.getSenders().forEach(s=>{if(s.track&&s.t
   const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];p.encodings[0].maxBitrate=4e5;s.setParameters(p).catch(()=>{})}})}catch{}}
 $('#q').onchange=()=>Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>boost(calls[k]));
 $('#fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():$('#stage').requestFullscreen();
-$('#vol').oninput=e=>{const x=+e.target.value;$('#gv').volume=x;$('#gv').muted=false;if(sc)sc.g.gain.value=x};
+/* movie volume is locked at 100% everywhere (use your device volume to adjust) */
+['fv','gv','fa'].forEach(id=>{const e=$('#'+id);e.volume=1;e.addEventListener('volumechange',()=>{if(e.volume!==1)e.volume=1})});
 $('#gv').onclick=()=>{$('#gv').muted=false};
 
 $('#snd').onclick=()=>{document.querySelectorAll('.tile video,#gv').forEach(v=>{v.muted=v.dataset.self==='1';v.play().catch(()=>{})});sh($('#snd'),false)};
 
 /* In-browser audio fix: copy the video untouched, re-encode only the audio to AAC (ffmpeg.wasm, runs locally) */
+function cv(p,t){const e=$('#cv');sh(e,true);e.classList.toggle('ind',p==null);$('#cvb').style.width=(p==null?100:p)+'%';$('#cvt').textContent=t}
 async function fixAudio(){
   const f=lastFile;if(!f)return;
   const name=f.name.replace(/\.\w+$/,'')+' (fixed audio).m4a',r=$('#rdy'),b=$('#fix');
@@ -416,23 +425,23 @@ async function fixAudio(){
   if(window.showSaveFilePicker){try{h=await showSaveFilePicker({suggestedName:name,types:[{description:'AAC audio',accept:{'audio/mp4':['.m4a']}}]})}catch(e){if(e.name==='AbortError')return}}
   b.disabled=true;
   try{
-    r.textContent='Loading converter (one-time, ~30 MB)…';
+    let t1=Date.now();cv(null,'Loading converter (one-time, about 30 MB)…');
     const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil;
-    ff.on('progress',({progress})=>r.textContent='Extracting audio… '+Math.max(0,Math.min(99,Math.round(progress*100)))+'% (a 3 GB movie takes several minutes)');
+    ff.on('progress',({progress})=>{const p=Math.max(0,Math.min(.99,progress)),m=Math.ceil((Date.now()-t1)/1000/p*(1-p)/60);cv(p*100,'Extracting audio… '+Math.round(p*100)+'%'+(p>.03?' · about '+m+' min left':''))});
     const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
     await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
     const src=new File([f],'input.'+(f.name.split('.').pop()||'mkv'));
     await ff.createDir('/in'); /* the mount point must exist first */
     await ff.mount('WORKERFS',{files:[src]},'/in'); /* streams the movie from disk, never loads all 3 GB */
-    const code=await ff.exec(['-i','/in/'+src.name,'-map','0:a:0','-vn','-c:a','aac','-b:a','160k','-ac','2','out.m4a']);
+    t1=Date.now();cv(0,'Extracting audio… 0%');const code=await ff.exec(['-i','/in/'+src.name,'-map','0:a:0','-vn','-c:a','aac','-b:a','160k','-ac','2','out.m4a']);
     if(code)throw new Error('this file has no convertible audio track (exit '+code+')');
-    const data=await ff.readFile('out.m4a');ff.terminate();
+    cv(100,'Saving to your computer…');const data=await ff.readFile('out.m4a');ff.terminate();
     let out=new File([data],name,{type:'audio/mp4'});
     if(h){const w=await h.createWritable();await w.write(data);await w.close();out=await h.getFile()}
     else{const x=document.createElement('a');x.href=URL.createObjectURL(out);x.download=name;x.click()}
-    r.textContent='';toast('Audio saved to your computer. Next time choose the movie and this .m4a together to skip conversion.',9000);
+    r.textContent='';cv(100,'Done');setTimeout(()=>sh($('#cv'),false),2500);toast('Audio saved to your computer. Next time choose the movie and this .m4a together to skip conversion.',9000);
     await loadFiles([f,out]);
-  }catch(e){r.textContent='';toast('Conversion failed: '+(e.message||e),9000)}
+  }catch(e){r.textContent='';sh($('#cv'),false);toast('Conversion failed: '+(e.message||e),9000)}
   b.disabled=false;
 }
 $('#fix').onclick=fixAudio;
