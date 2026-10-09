@@ -422,6 +422,7 @@ async function fixAudio(){
     const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
     await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
     const src=new File([f],'input.'+(f.name.split('.').pop()||'mkv'));
+    await ff.createDir('/in'); /* the mount point must exist first */
     await ff.mount('WORKERFS',{files:[src]},'/in'); /* streams the movie from disk, never loads all 3 GB */
     const code=await ff.exec(['-i','/in/'+src.name,'-map','0:a:0','-vn','-c:a','aac','-b:a','160k','-ac','2','out.m4a']);
     if(code)throw new Error('this file has no convertible audio track (exit '+code+')');
