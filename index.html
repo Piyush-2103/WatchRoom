@@ -99,7 +99,7 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
 </div></div>
 
 <div id="app" hidden>
- <header><div class="logo sm">Watch<span>room</span></div><span id="rc" class="chip"></span><span id="st" class="chip"></span><button id="theatre">Theatre mode</button><button id="copy">Copy invite link</button></header>
+ <header><div class="logo sm">Watch<span>room</span></div><span id="rc" class="chip"></span><span id="st" class="chip"></span><button id="theatre">Theatre mode</button><button id="copy">Copy invite link</button><button id="leave">Leave room</button></header>
  <main>
   <div id="bar" hidden>
    <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link"><button id="loadyt">Play YouTube</button>
@@ -162,16 +162,18 @@ function start(host){
     me={id,name};users[id]={name,host};
     const room=host?id:code;invite=location.href.split('#')[0]+'#'+room;
     $('#land').hidden=true;$('#app').hidden=false;$('#rc').textContent='Room '+room;
-    if(host){sh($('#bar'),true);sh($('#tabadm'),true);applySettings()}
+    if(host){$('#leave').textContent='End room';keepAwake();sh($('#bar'),true);sh($('#tabadm'),true);applySettings()}
     else{
       hostConn=peer.connect(room,{reliable:true});
       hostConn.on('open',()=>{send(hostConn,{t:'hello',name});renderUsers()});
       hostConn.on('data',guestRecv);
-      hostConn.on('close',()=>{renderUsers();toast('Disconnected from the host')});
+      hostConn.on('close',()=>{toast('The host left, so this room is closed.',6000);setTimeout(()=>{history.replaceState(null,'',location.pathname+location.search);location.reload()},3500)});
     }
   });
   peer.on('connection',c=>isHost&&hostAccept(c));
   peer.on('call',onCall);
+  /* keep the room code alive: if the link to the signaling server drops (sleep, Wi-Fi blip), re-register the same code */
+  peer.on('disconnected',()=>{const t=setInterval(()=>{if(peer.destroyed||!peer.disconnected)return clearInterval(t);try{peer.reconnect()}catch{}},3000)});
   peer.on('error',e=>{$('#create').disabled=$('#join').disabled=false;toast(e.type==='peer-unavailable'?'Room not found. Check the code.':'Connection error: '+e.type);if(e.type==='peer-unavailable')setTimeout(()=>location.reload(),2200)});
 }
 function hostAccept(c){
@@ -482,6 +484,18 @@ function applyRole(){
 function fbtn(){sh($('#gp'),!isHost&&(S.fctl||isAdm()));$('#gp').textContent=fplaying?'⏸ Pause':'▶ Play'}
 $('#gp').onclick=()=>send(hostConn,{t:'film',a:fplaying?'pause':'play'});
 ['play','pause'].forEach(ev=>$('#fv').addEventListener(ev,()=>bcast({t:'fstate',playing:!$('#fv').paused})));
+
+/* room lifetime: no timers. A room lives while the host's tab is open and is deleted the moment the host ends it or leaves */
+let wl=null;
+async function keepAwake(){try{wl=await navigator.wakeLock.request('screen')}catch{}} /* stops the host's screen sleeping and dropping the room */
+document.addEventListener('visibilitychange',()=>{if(isHost&&document.visibilityState==='visible')keepAwake()});
+function closeRoom(){
+  Object.values(conns).forEach(c=>c.close());
+  try{peer.destroy()}catch{} /* frees the room code on the server straight away */
+  history.replaceState(null,'',location.pathname+location.search);location.reload();
+}
+$('#leave').onclick=()=>{if(!isHost||confirm('End the room for everyone? The room code and invite link will stop working.'))closeRoom()};
+addEventListener('pagehide',()=>{if(peer&&!peer.destroyed)try{peer.destroy()}catch{}});
 
 /* ---------- wiring ---------- */
 $('#create').onclick=()=>start(true);$('#join').onclick=()=>start(false);
