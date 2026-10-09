@@ -419,7 +419,7 @@ async function fixAudio(){
     r.textContent='Loading converter (one-time, ~30 MB)…';
     const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil;
     ff.on('progress',({progress})=>r.textContent='Extracting audio… '+Math.max(0,Math.min(99,Math.round(progress*100)))+'% (a 3 GB movie takes several minutes)');
-    const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
+    const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
     await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
     const src=new File([f],'input.'+(f.name.split('.').pop()||'mkv'));
     await ff.mount('WORKERFS',{files:[src]},'/in'); /* streams the movie from disk, never loads all 3 GB */
