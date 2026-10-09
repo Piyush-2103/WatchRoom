@@ -103,8 +103,8 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
  <main>
   <div id="bar" hidden>
    <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link"><button id="loadyt">Play YouTube</button>
-   <button id="pick" class="pri">Choose movie</button><input type="file" id="file" accept="video/*,audio/*,.mkv,.m4a,.mka" multiple hidden>
-   <select id="q" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><button id="fix" class="pri" hidden>Fix audio</button><span id="rdy"></span>
+   <button id="pick" class="pri ho">Choose movie</button><input type="file" id="file" accept="video/*,audio/*,.mkv,.m4a,.mka" multiple hidden>
+   <select id="q" class="ho" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><button id="fix" class="pri" hidden>Fix audio</button><span id="rdy"></span>
   </div>
   <div id="cv" hidden><div class="trk"><div id="cvb"></div></div><span id="cvt"></span></div>
   <div id="stage">
@@ -113,7 +113,7 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
    <div id="fvp" hidden><video id="fv" controls playsinline></video></div>
    <div id="gvp" hidden><video id="gv" playsinline></video></div>
    <div id="rx"></div>
-   <div id="ctl" hidden><button id="fs">Fullscreen</button></div>
+   <div id="ctl" hidden><button id="gp" hidden>Pause</button><button id="fs">Fullscreen</button></div>
   </div>
   <div id="dock">
    <button id="media">Join voice &amp; video</button><button id="mic" hidden>Mic</button><button id="cmt" hidden>Camera</button>
@@ -132,6 +132,7 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
    <label class="opt"><input type="checkbox" id="s-mic"><div>Guest microphones<small>Off mutes everyone but you</small></div></label>
    <label class="opt"><input type="checkbox" id="s-cam"><div>Guest cameras<small>Off turns guest video off</small></div></label>
    <label class="opt"><input type="checkbox" id="s-control"><div>Guests control YouTube<small>Play, pause and seek for everyone</small></div></label>
+   <label class="opt"><input type="checkbox" id="s-fctl"><div>Guests play/pause the movie<small>Let guests pause and resume your local video</small></div></label>
    <label class="opt"><input type="checkbox" id="s-react"><div>Reactions<small>Let guests send emoji reactions</small></div></label>
    <label class="opt"><input type="checkbox" id="s-locked"><div>Lock room<small>Block new people from joining</small></div></label>
   </div>
@@ -143,7 +144,7 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
 <script>
 const $=s=>document.querySelector(s),sh=(e,v)=>e.hidden=!v;
 let peer,isHost=false,me={},hostConn,conns={},users={},calls={},local=null,movieStream=null,mode='none',yt=null,ytOK=false,ytId=null,applying=false,invite='';
-let S={chat:true,mic:true,cam:true,control:false,locked:false,react:true},unread=0;
+let S={chat:true,mic:true,cam:true,control:false,locked:false,react:true,fctl:false},unread=0;
 const ready=new Set(),BR={1080:6e6,720:3.5e6,480:1.5e6};
 const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}};
 const send=(c,m)=>c&&c.open&&c.send(m);
@@ -178,12 +179,16 @@ function hostAccept(c){
     if(d.t==='hello'){
       if(S.locked){send(c,{t:'denied'});return setTimeout(()=>c.close(),400)}
       conns[c.peer]=c;users[c.peer]={name:String(d.name).slice(0,20)};
-      send(c,{t:'init',users,S,mode,ytId});
+      send(c,{t:'init',users,S,mode,ytId});send(c,{t:'fstate',playing:mode==='file'&&!$('#fv').paused});
       bcast({t:'users',users});renderUsers();sys(users[c.peer].name+' joined');syncCalls();
       if(movieStream)callMovie(c.peer);
     }else if(conns[c.peer]){
       if(d.t==='chat'&&S.chat){const m={t:'chat',from:users[c.peer].name,text:String(d.text).slice(0,500)};bcast(m,c.peer);addChat(m)}
-      if(d.t==='yt'&&S.control){applyYT(d);bcast(d,c.peer)}
+      if(d.t==='yt'&&(S.control||adm(c.peer))){applyYT(d);bcast(d,c.peer)}
+      if(d.t==='film'&&(S.fctl||adm(c.peer))&&mode==='file'&&movieStream){const v=$('#fv');if(d.a==='play')v.play().catch(()=>{});else if(d.a==='pause')v.pause()}
+      if(d.t==='yturl'&&adm(c.peer)&&/^[\w-]{11}$/.test(d.id)){stopMovie();hostMode('yt',d.id)}
+      if(d.t==='setting'&&adm(c.peer)&&S.hasOwnProperty(d.k)){S[d.k]=!!d.v;bcast({t:'settings',S});applySettings()}
+      if(d.t==='admin'&&adm(c.peer)&&['mute','kick'].includes(d.a)&&users[d.id]&&!users[d.id].admin)hostAct(d.a,d.id);
       if(d.t==='react'&&S.react){bcast(d,c.peer);float(d.e)}
       if(d.t==='ready'){ready.add(c.peer);updReady()}
     }
@@ -202,6 +207,8 @@ function guestRecv(d){
   else if(d.t==='chat')addChat(d)
   else if(d.t==='yt')applyYT(d)
   else if(d.t==='react')float(d.e)
+  else if(d.t==='fstate'){fplaying=d.playing;fbtn()}
+  else if(d.t==='toast')toast(d.text)
   else if(d.t==='kick'){toast('The host removed you from the room');setTimeout(()=>location.reload(),1500)}
   else if(d.t==='mute'){setTrack('audio',false);toast('The host muted you')}
   else if(d.t==='denied')toast('This room is locked')
@@ -227,32 +234,49 @@ function sendChat(){
 function renderUsers(){
   const ul=$('#ulist');ul.innerHTML='';updReady();
   $('#st').textContent=isHost?'● '+Object.keys(conns).length+' watching':(hostConn&&hostConn.open?'● Connected':'● Connecting…');
+  const mk=(li,a,l)=>{const b=document.createElement('button');b.textContent=l;b.dataset.a=a;li.append(b)};
   for(const id in users){
-    const li=document.createElement('li'),s=document.createElement('span');
-    s.textContent=users[id].name+(id===me.id?' (you)':'');li.append(s);
-    if(users[id].host){const g=document.createElement('em');g.className='tag';g.textContent='host';li.append(g)}
-    else if(isHost){
-      for(const [a,l] of [['mute','Mute'],['kick','Remove']]){const b=document.createElement('button');b.textContent=l;b.dataset.a=a;b.dataset.id=id;li.append(b)}
+    const u=users[id],li=document.createElement('li'),sp=document.createElement('span');li.dataset.id=id;
+    sp.textContent=u.name+(id===me.id?' (you)':'');li.append(sp);
+    const tg=u.host?'host':u.admin?'admin':'';
+    if(tg){const g=document.createElement('em');g.className='tag';g.textContent=tg;li.append(g)}
+    if(!u.host&&id!==me.id&&isAdm()){
+      if(isHost)mk(li,u.admin?'demote':'promote',u.admin?'Make user':'Make admin');
+      if(isHost||!u.admin){mk(li,'mute','Mute');mk(li,'kick','Remove')}
     }
     ul.append(li);
   }
+  applyRole();
 }
 $('#ulist').onclick=e=>{
-  const b=e.target.closest('button');if(!b||!isHost)return;const c=conns[b.dataset.id];
-  if(b.dataset.a==='mute')send(c,{t:'mute'});
-  else{send(c,{t:'kick'});setTimeout(()=>c&&c.close(),300)}
+  const b=e.target.closest('button');if(!b)return;const id=b.closest('li').dataset.id,a=b.dataset.a;
+  if(isHost)hostAct(a,id);else if(isAdm())send(hostConn,{t:'admin',a,id});
 };
+function hostAct(a,id){
+  const c=conns[id];if(!c||!users[id])return;
+  if(a==='mute')send(c,{t:'mute'});
+  else if(a==='kick'){send(c,{t:'kick'});setTimeout(()=>c.close(),300)}
+  else if(a==='promote'||a==='demote'){
+    users[id].admin=a==='promote';bcast({t:'users',users});renderUsers();
+    send(c,{t:'toast',text:a==='promote'?'You are now an admin':'You are no longer an admin'});
+    sys(users[id].name+(a==='promote'?' is now an admin':' is no longer an admin'));
+  }
+}
 
 /* ---------- admin settings ---------- */
 function applySettings(){
   document.querySelectorAll('#reacts button').forEach(b=>b.disabled=!isHost&&!S.react);$('#msg').readOnly=!S.chat&&!isHost;$('#msg').placeholder=S.chat||isHost?'Say something…':'Chat is turned off by the host';
-  if(!isHost){
+  if(!isAdm()){
     if(!S.mic)setTrack('audio',false);if(!S.cam)setTrack('video',false);
     $('#mic').disabled=!S.mic;$('#cmt').disabled=!S.cam;
-  }
+  }else{$('#mic').disabled=$('#cmt').disabled=false}
+  fbtn();
   for(const k in S){const e=$('#s-'+k);if(e)e.checked=S[k]}
 }
-['chat','mic','cam','control','react','locked'].forEach(k=>$('#s-'+k).onchange=e=>{S[k]=e.target.checked;bcast({t:'settings',S});applySettings()});
+['chat','mic','cam','control','fctl','react','locked'].forEach(k=>$('#s-'+k).onchange=e=>{
+  if(isHost){S[k]=e.target.checked;bcast({t:'settings',S});applySettings()}
+  else send(hostConn,{t:'setting',k,v:e.target.checked}); /* admins ask the host to apply it */
+});
 
 /* ---------- cam & mic (mesh) ---------- */
 function setTrack(kind,on){if(local)(kind==='audio'?local.getAudioTracks():local.getVideoTracks()).forEach(t=>t.enabled=on)}
@@ -319,7 +343,7 @@ function loadYT(id){
     yt=new YT.Player('yt',{playerVars:{rel:0,playsinline:1},events:{
       onReady:()=>{ytOK=true;yt.loadVideoById(ytId);yt.setPlaybackQuality('hd1080')},
       onStateChange:e=>{
-        if(applying||!(isHost||S.control))return;
+        if(applying||!(isAdm()||S.control))return;
         if(e.data===1||e.data===2){
           const m={t:'yt',a:e.data===1?'play':'pause',time:yt.getCurrentTime()};
           isHost?bcast(m):send(hostConn,m);
@@ -339,7 +363,7 @@ setInterval(()=>{if(isHost&&mode==='yt'&&ytOK)bcast({t:'yt',a:'sync',time:yt.get
 $('#loadyt').onclick=()=>{
   const r=$('#yturl').value.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/);
   if(!r)return toast('That is not a valid YouTube link');
-  stopMovie();hostMode('yt',r[1]);
+  if(isHost){stopMovie();hostMode('yt',r[1])}else send(hostConn,{t:'yturl',id:r[1]});
 };
 
 /* Local file -> everyone (host's browser re-streams it over WebRTC) */
@@ -445,6 +469,19 @@ async function fixAudio(){
   b.disabled=false;
 }
 $('#fix').onclick=fixAudio;
+
+/* roles: the host owns the room; admins get host-level controls except choosing local files and managing admins */
+let fplaying=false;
+const adm=id=>!!(users[id]&&(users[id].admin||users[id].host)),isAdm=()=>isHost||adm(me.id);
+function applyRole(){
+  const a=isAdm();sh($('#tabadm'),a);sh($('#bar'),a);
+  document.querySelectorAll('#bar .ho').forEach(e=>e.hidden=!isHost);
+  if(!a&&!$('#adm').hidden)$('#tabchat').click();
+  applySettings();
+}
+function fbtn(){sh($('#gp'),!isHost&&(S.fctl||isAdm()));$('#gp').textContent=fplaying?'⏸ Pause':'▶ Play'}
+$('#gp').onclick=()=>send(hostConn,{t:'film',a:fplaying?'pause':'play'});
+['play','pause'].forEach(ev=>$('#fv').addEventListener(ev,()=>bcast({t:'fstate',playing:!$('#fv').paused})));
 
 /* ---------- wiring ---------- */
 $('#create').onclick=()=>start(true);$('#join').onclick=()=>start(false);
