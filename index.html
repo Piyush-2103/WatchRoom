@@ -77,6 +77,7 @@ aside{background:linear-gradient(#1c0d10,#120709);border:1px solid var(--line);b
 #ccbox{display:contents}
 #volw{display:flex;align-items:center;gap:6px}#volw input{width:90px;accent-color:var(--gold)}
 #stage>#osd{inset:14px auto auto 14px;width:auto;height:auto;max-width:70%;background:#000b;color:var(--cream);padding:6px 14px;border-radius:6px;font-weight:600;z-index:4;pointer-events:none}
+#stage:fullscreen{border:0;box-shadow:none;border-radius:0}
 #stage:fullscreen #cap{font-size:clamp(22px,3vw,52px);bottom:90px}
 body.theatre #stage>#cap{font-size:clamp(18px,2.8vw,40px)}
 dialog{background:#1c0d10;color:var(--cream);border:1px solid var(--gold2);border-radius:12px;padding:20px;max-width:min(420px,92vw)}
@@ -113,7 +114,7 @@ body.theatre header:hover,body.theatre #tiles:hover,body.theatre #bar:hover{opac
   <div id="bar" hidden>
    <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link"><button id="loadyt">Play YouTube</button>
    <button id="pick" class="pri ho">Choose movie</button><input type="file" id="file" accept="video/*,audio/*,.mkv,.m4a,.mka,.srt,.vtt" multiple hidden>
-   <select id="q" class="ho" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><button id="live" class="pri" hidden>Play original audio</button><button id="fix" hidden>Audio tracks</button><button id="subx" hidden>Extract subtitles</button><span id="rdy"></span>
+   <select id="q" class="ho" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><button id="fix" hidden>Audio tracks</button><button id="subx" hidden>Extract subtitles</button><span id="rdy"></span>
   </div>
   <div id="cv" hidden><div class="trk"><div id="cvb"></div></div><span id="cvt"></span></div>
   <div id="stage">
@@ -243,6 +244,7 @@ function addChat(m){
   const d=document.createElement('div'),l=$('#log');
   if(m.sys){d.className='sys';d.textContent=m.text}else{const b=document.createElement('b');b.textContent=m.from;d.append(b,document.createTextNode(m.text))}
   l.append(d);l.scrollTop=l.scrollHeight;
+  while(l.childElementCount>150)l.firstChild.remove();
   if($('#chat').hidden&&!m.sys){unread++;$('#tabchat').textContent='Chat ('+unread+')'}
 }
 const sys=text=>addChat({sys:true,text});
@@ -427,8 +429,7 @@ function setAudioList(){
 }
 function osd(t){const e=$('#osd');e.textContent=t;sh(e,true);clearTimeout(osd.t);osd.t=setTimeout(()=>sh(e,false),1800)}
 function chooseAudio(i){ /* used by the dropdown and the B key; announces the choice like VLC */
-  const say=()=>{pickAudio(i);osd('Audio: '+(aNames[i]||''))};
-  if(isHost&&!tracks.length&&scanned&&scanned.found.length>1)prepare(scanned,scanned.found.map((x,k)=>k).slice(0,4),true).then(say);else say();
+  pickAudio(i);osd('Audio: '+(aNames[i]||''));
 }
 $('#al').onchange=e=>{chooseAudio(+e.target.value);e.target.blur()};
 function syncAudio(v){ /* keep every language track locked to the video */
@@ -452,14 +453,14 @@ async function loadFiles(list){
   const subs=list.filter(isSub),auds=list.filter(isAud),f=list.find(x=>!isAud(x)&&!isSub(x));
   if(!f&&subs.length&&lastFile)return addSubFiles(subs); /* adding subtitles to the movie that is already loaded */
   if(!f)return toast('Choose the movie file. You can also pick saved audio files and subtitles together with it.');
-  if(scanned&&scanned.file!==f){try{scanned.ff.terminate()}catch{}scanned=null;liveSpec=null}
+  
   const c=await cget(f); /* reuse audio/subtitles extracted earlier */
-  if(!auds.length&&!liveSpec)auds.push(...c.audio);if(!subs.length)subs.push(...c.subs);
-  if(c.audio.length&&!list.some(isAud)&&!liveSpec)toast('Using the audio saved in this browser for this movie');
-  lastFile=f;stopMovie();resetCaps();sh($('#subx'),true);sh($('#fix'),true);sh($('#live'),true);if(subs.length)addSubFiles(subs);
-  const v=$('#fv');v.src=URL.createObjectURL(f);v.muted=!!(auds.length||liveSpec); /* the movie's own sound must stay silent whenever a chosen language track is in use */hostMode('file');
+  if(!auds.length)auds.push(...c.audio);if(!subs.length)subs.push(...c.subs);
+  if(c.audio.length&&!list.some(isAud))toast('Using the audio saved in this browser for this movie');
+  lastFile=f;stopMovie();resetCaps();sh($('#subx'),true);sh($('#fix'),true);if(subs.length)addSubFiles(subs);
+  const v=$('#fv');v.src=URL.createObjectURL(f);v.muted=!!auds.length; /* the movie's own sound must stay silent whenever a chosen language track is in use */hostMode('file');
   auds.forEach(x=>{const m=x.name.match(/.* - ([^.]+)\.\w+$/);addTrack(x,m?m[1]:x.name.replace(/\.\w+$/,''))});
-  if(liveSpec)liveSpec.picks.forEach(q=>addLive(liveSpec,q));
+  
   aNames=tracks.map(t=>t.name);bcast({t:'alangs',names:aNames});setAudioList();pickAudio(0);
   if(tracks.length)syncAudio(v);
   syncAudio.hold=true; /* while the picture is being started, audio buffering must not interrupt it */
@@ -475,22 +476,21 @@ async function loadFiles(list){
   await new Promise(r=>setTimeout(r,1800));
   const bad=!tracks.length&&(!movieStream.getAudioTracks().length||v.webkitAudioDecodedByteCount===0||v.mozHasAudio===false);
   v.pause();v.currentTime=0;syncAudio.hold=false;
-  toast(bad?'No sound: your browser can\'t decode this movie\'s audio (AC3/DTS). Press "Play original audio" to start right away, or "Audio tracks" to extract and save it once.':'Ready. Press play once everyone shows as ready. Dubbed in other languages? Use "Audio tracks".',bad?15000:5000);
-  if(!tracks.length&&!liveSpec)autoScan(f); /* look for dubbed languages in the background */
+  toast(bad?'No sound: your browser can\'t decode this movie\'s audio (AC3/DTS). Extract and save it via "Audio tracks".':'Ready. Press play once everyone shows as ready. Dubbed in other languages? Use "Audio tracks".',bad?15000:5000);
 }
 function callMovie(id){
   if(!movieStream)return;
   const c=peer.call(id,movieStream,{metadata:{type:'movie'},sdpTransform:h264});calls['movie:'+id]=c;
   [800,3000].forEach(ms=>setTimeout(()=>boost(c),ms));
 }
-function boost(c){ /* cap bitrate by chosen quality; balanced mode drops frames gracefully instead of stalling */
+function boost(c){ /* cap bitrate by chosen quality; maintain-framerate stops FPS drops during heavy rendering */
   const q=+$('#q').value,h=$('#fv').videoHeight||q;
   try{c.peerConnection.getSenders().forEach(s=>{
     if(!s.track||s.track.kind!=='video')return;
     s.track.contentHint='motion';
     const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];
     p.encodings[0].maxBitrate=BR[q];p.encodings[0].scaleResolutionDownBy=Math.max(1,h/q);p.encodings[0].maxFramerate=30;
-    p.degradationPreference='balanced';p.encodings[0].priority='high';p.encodings[0].networkPriority='high';s.setParameters(p).catch(()=>{});
+    p.degradationPreference='maintain-framerate';p.encodings[0].priority='high';p.encodings[0].networkPriority='high';s.setParameters(p).catch(()=>{});
   })}catch{}
 }
 function stopMovie(){
@@ -502,7 +502,9 @@ function stopMovie(){
 function updReady(){const r=$('#rdy');if(r)r.textContent=isHost&&movieStream?'Ready: '+ready.size+'/'+Object.keys(conns).length:''}
 function float(e){
   const d=document.createElement('div');d.className='fl';d.textContent=e;
-  d.style.left=(8+Math.random()*80)+'%';$('#rx').append(d);setTimeout(()=>d.remove(),3000);
+  d.style.left=(8+Math.random()*80)+'%';
+  d.onanimationend=()=>d.remove();
+  $('#rx').append(d);
 }
 document.querySelectorAll('#reacts button').forEach(b=>b.onclick=()=>{
   const e=b.textContent;float(e);isHost?bcast({t:'react',e}):send(hostConn,{t:'react',e});
@@ -548,7 +550,20 @@ async function fixAudio(){ /* extracts the chosen languages in 30 s pieces with 
   try{
     if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
     cv(null,'Loading converter (one-time, about 30 MB)…');
-    const L=await scan(f);
+    
+    // Inline quick scan since autoScan was removed
+    const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil,logs=[],lg=({message})=>logs.push(message);
+    ff.on('log',lg);
+    const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
+    await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
+    const name='input.'+(f.name.split('.').pop()||'mkv');
+    await ff.createDir('/in');await ff.mount('WORKERFS',{files:[new File([f],name)]},'/in');
+    await ff.exec(['-i','/in/'+name]);ff.off('log',lg);
+    const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)([^\n]*)/g,(m,i,l,c,rest)=>{if(found.length<8)found.push({i:+i,l:l||'und',c:c.toLowerCase(),b:/Hz, (?:5|6|7|quad|4\.)/.test(rest)?2.2:1})});
+    if(!found.length)throw new Error('no audio track found in this file');
+    const names=[];found.forEach(x=>{let n=nice(x.l),k=2;while(names.includes(n))n=nice(x.l)+' '+k++;names.push(n)});
+    const L={ff,name,file:f,found,names};
+    
     const sel=await chooseTracks(L.found.map((x,k)=>({...x,n:L.names[k],done:false})));
     if(!sel.length){sh($('#cv'),false);b.disabled=false;return}
     const dur=$('#fv').duration;if(!dur||!isFinite(dur))throw new Error('the movie has not finished loading yet');
@@ -571,7 +586,10 @@ async function fixAudio(){ /* extracts the chosen languages in 30 s pieces with 
     }));
     if(fail===jobs.length)throw new Error('could not convert the audio');
     cv(100,'Done');setTimeout(()=>sh($('#cv'),false),2500);
-    await prepare(L,sel); /* playback now reads the saved pieces */
+    
+    // Playback now reads the saved pieces by reloading the file
+    const v=$('#fv'),t=v.currentTime;await loadFiles([L.file]);if(t>1)v.currentTime=t;
+
   }catch(e){sh($('#cv'),false);toast('Conversion failed: '+(e.message||e),9000)}
   b.disabled=false;
 }
@@ -678,101 +696,6 @@ async function extractSubs(){
   sh($('#cv'),false);b.disabled=false;
 }
 $('#subx').onclick=extractSubs;
-
-/* ---------- EXPERIMENTAL: play the original audio directly (AC3/DTS decoded on the fly, no conversion step) ---------- */
-let liveSpec=null,scanned=null;
-class LiveAudio{ /* plays one language in 30 s pieces: from the saved cache when present, otherwise decoded on demand */
-  constructor(L,idx,bus){this.L=L;this.idx=idx;this.bus=bus;this.live=true;this.chunks=new Map();this.pend=new Map();this.srcs=[];this.t=0;this.t0=0;this.at=0;this.on=false;this.sc=false;this.gen=0}
-  get currentTime(){return this.on&&this.sc?this.t0+(ctx().ac.currentTime-this.at):this.t}
-  set currentTime(t){const w=this.on;this.on=false;this.kill();this.t=t;if(w)this.play()}
-  set playbackRate(r){}
-  has(t){return this.chunks.has(Math.floor(t/30))}
-  prime(t){return this.get(Math.floor(t/30))}
-  kill(){this.gen++;this.sc=false;clearTimeout(this.tm);this.srcs.forEach(x=>{try{x.stop()}catch{}});this.srcs=[]}
-  pause(){if(!this.on)return;this.t=this.currentTime;this.on=false;this.kill()}
-  stop(){this.on=false;this.kill();this.chunks.clear();this.pend.clear()}
-  removeAttribute(){this.stop()}
-  async play(){
-    if(this.on)return;this.on=true;this.gen++;const g=this.gen,k=Math.floor(this.t/30);
-    const ab=this.chunks.get(k)||await this.get(k);if(g!==this.gen||!this.on)return;
-    this.at=ctx().ac.currentTime;this.t0=this.t;this.sc=true;this.queue(ab,k,g);
-  }
-  queue(ab,k,g){ /* every piece is placed at its own absolute time, so small length differences never add up */
-    const ac=ctx().ac,when=this.at+Math.max(0,k*30-this.t0),off=Math.max(0,this.t0-k*30),s=ac.createBufferSource();
-    s.buffer=ab;s.connect(this.bus);s.start(Math.max(when,ac.currentTime),off);this.srcs.push(s);
-    s.onended=()=>{this.srcs=this.srcs.filter(x=>x!==s)};
-    if(ab.duration<29)return; /* last piece of the movie */
-    this.chunks.delete(k-2);
-    this.get(k+1).then(nb=>{if(g!==this.gen||!this.on)return;
-      this.tm=setTimeout(()=>{if(g===this.gen&&this.on)this.queue(nb,k+1,g)},Math.max(0,(this.at+(k+1)*30-this.t0-ctx().ac.currentTime-20)*1000))});
-  }
-  get(k){
-    if(this.chunks.has(k))return Promise.resolve(this.chunks.get(k));
-    if(this.pend.has(k))return this.pend.get(k);
-    const L=this.L,out='c'+this.idx+'_'+k+'.pcm';
-    const p=(async()=>{
-      const seg=await segGet(L.file,this.idx,k); /* already extracted: native decoding, instant */
-      if(seg){try{return await ctx().ac.decodeAudioData(await seg.arrayBuffer())}catch{}}
-      return L.run(async ff=>{
-        let d=new Uint8Array(4);
-        try{await ff.exec(['-loglevel','error','-probesize','1M','-analyzeduration','1M','-ss',String(k*30),'-i','/in/'+L.name,'-t','30','-map','0:'+this.idx,'-vn','-f','s16le','-ac','2','-ar','48000',out]);d=await ff.readFile(out);await ff.deleteFile(out)}catch{}
-        const n=Math.max(1,d.length>>2),ab=ctx().ac.createBuffer(2,n,48000),l=ab.getChannelData(0),r=ab.getChannelData(1),dv=new DataView(d.buffer,d.byteOffset,d.byteLength);
-        for(let i=0;i<n&&i*4+3<d.length;i++){l[i]=dv.getInt16(i*4,true)/32768;r[i]=dv.getInt16(i*4+2,true)/32768}
-        return ab;
-      });
-    })().then(ab=>{this.chunks.set(k,ab);this.pend.delete(k);return ab});
-    this.pend.set(k,p);return p;
-  }
-}
-function addLive(L,pick){
-  const ac=ctx().ac,dst=ac.createMediaStreamDestination(),g=ac.createGain(),bus=ac.createGain(),o=new LiveAudio(L,pick.i,bus);
-  bus.connect(feed(ac,dst,pick.boost));bus.connect(g);g.connect(feed(ac,ac.destination,pick.boost));
-  tracks.push({el:o,src:{disconnect(){o.stop()}},dst,g,name:pick.name});ac.resume();
-}
-async function scan(f){
-  if(scanned&&scanned.file===f)return scanned;
-  try{scanned&&scanned.ff.terminate()}catch{}
-  const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil,logs=[],lg=({message})=>logs.push(message);
-  ff.on('log',lg);
-  const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
-  await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
-  const name='input.'+(f.name.split('.').pop()||'mkv');
-  await ff.createDir('/in');await ff.mount('WORKERFS',{files:[new File([f],name)]},'/in');
-  await ff.exec(['-i','/in/'+name]);ff.off('log',lg);
-  const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)([^\n]*)/g,(m,i,l,c,rest)=>{if(found.length<8)found.push({i:+i,l:l||'und',c:c.toLowerCase(),b:/Hz, (?:5|6|7|quad|4\.)/.test(rest)?2.2:1})});
-  if(!found.length)throw new Error('no audio track found in this file');
-  const names=[];found.forEach(x=>{let n=nice(x.l),k=2;while(names.includes(n))n=nice(x.l)+' '+k++;names.push(n)});
-  const L={ff,name,file:f,found,names,q:Promise.resolve()};
-  L.run=fn=>{const p=L.q.then(()=>fn(ff));L.q=p.catch(()=>{});return p}; /* one decode at a time */
-  return scanned=L;
-}
-async function prepare(L,sel,keepTime){ /* play these languages live; restarts the movie (optionally at the same spot) */
-  L.picks=sel.map(i=>({i:L.found[i].i,name:L.names[i],boost:L.found[i].b}));liveSpec=L;
-  const v=$('#fv'),t=keepTime?v.currentTime:0;await loadFiles([L.file]);if(t>1)v.currentTime=t;
-}
-async function autoScan(f){ /* finds the movie's audio languages so everyone gets an Audio dropdown */
-  const r=$('#rdy');
-  try{
-    r.textContent='Looking for audio languages…';
-    const L=await scan(f);if(lastFile!==f)return;
-    r.textContent='';if(L.found.length<2)return;
-    const v=$('#fv'),all=L.found.map((x,k)=>k).slice(0,4);
-    if(v.paused&&v.currentTime<1){toast('Found '+L.found.length+' audio languages ('+L.names.slice(0,4).join(', ')+'). Preparing them…',5000);await prepare(L,all)}
-    else{aNames=L.names.slice(0,4);setAudioList()} /* movie already playing: choosing a language restarts it at the same spot */
-  }catch{r.textContent=''}
-}
-async function liveAudio(){
-  const f=lastFile;if(!f)return;const b=$('#live');b.disabled=true;
-  try{
-    cv(null,'Loading converter (one-time, about 30 MB)…');
-    const L=await scan(f);
-    const sel=await chooseTracks(L.found.map((x,k)=>({...x,n:L.names[k],done:false})));
-    if(!sel.length){sh($('#cv'),false);b.disabled=false;return}
-    cv(null,'Starting…');await prepare(L,sel);sh($('#cv'),false);
-  }catch(e){sh($('#cv'),false);toast('Could not start live audio: '+(e.message||e),9000)}
-  b.disabled=false;
-}
-$('#live').onclick=liveAudio;
 
 document.addEventListener('fullscreenchange',()=>{
   const e=document.fullscreenElement,box=$('#ccbox'),dock=$('#dock');
