@@ -414,7 +414,11 @@ function setAudioList(){
   aNames.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent='Audio: '+n;s.append(o)});
   sh(s,aNames.length>1&&mode==='file');s.value=aSel;
 }
-$('#al').onchange=e=>pickAudio(+e.target.value);
+$('#al').onchange=e=>{
+  const i=+e.target.value;
+  if(isHost&&!tracks.length&&scanned&&scanned.found.length>1)prepare(scanned,scanned.found.map((x,k)=>k).slice(0,4),true).then(()=>pickAudio(i));
+  else pickAudio(i);
+};
 function syncAudio(v){ /* keep every language track locked to the video */
   const els=()=>tracks.map(t=>t.el),live=()=>els().filter(a=>a.live);
   const set=()=>els().forEach(a=>{a.currentTime=v.currentTime});
@@ -436,7 +440,7 @@ async function loadFiles(list){
   const subs=list.filter(isSub),auds=list.filter(isAud),f=list.find(x=>!isAud(x)&&!isSub(x));
   if(!f&&subs.length&&lastFile)return addSubFiles(subs); /* adding subtitles to the movie that is already loaded */
   if(!f)return toast('Choose the movie file. You can also pick saved audio files and subtitles together with it.');
-  if(liveSpec&&liveSpec.file!==f){try{liveSpec.ff.terminate()}catch{}liveSpec=null}
+  if(scanned&&scanned.file!==f){try{scanned.ff.terminate()}catch{}scanned=null;liveSpec=null}
   const c=await cget(f); /* reuse audio/subtitles extracted earlier */
   if(!auds.length&&!liveSpec)auds.push(...c.audio);if(!subs.length)subs.push(...c.subs);
   if(c.audio.length&&!list.some(isAud)&&!liveSpec)toast('Using the audio saved in this browser for this movie');
@@ -455,6 +459,7 @@ async function loadFiles(list){
   const bad=!tracks.length&&(!movieStream.getAudioTracks().length||v.webkitAudioDecodedByteCount===0||v.mozHasAudio===false);
   v.pause();v.currentTime=0;
   toast(bad?'No sound: your browser can\'t decode this movie\'s audio (AC3/DTS). Press "Play original audio" to start right away, or "Audio tracks" to extract and save it once.':'Ready. Press play once everyone shows as ready. Dubbed in other languages? Use "Audio tracks".',bad?15000:5000);
+  if(!tracks.length&&!liveSpec)autoScan(f); /* look for dubbed languages in the background */
 }
 function callMovie(id){
   if(!movieStream)return;
@@ -650,7 +655,7 @@ async function extractSubs(){
 $('#subx').onclick=extractSubs;
 
 /* ---------- EXPERIMENTAL: play the original audio directly (AC3/DTS decoded on the fly, no conversion step) ---------- */
-let liveSpec=null;
+let liveSpec=null,scanned=null;
 class LiveAudio{ /* decodes the original audio in 30 s pieces on demand and plays them on the WebAudio clock */
   constructor(L,idx,bus){this.L=L;this.idx=idx;this.bus=bus;this.live=true;this.chunks=new Map();this.pend=new Map();this.srcs=[];this.t=0;this.at=0;this.on=false;this.sc=false;this.gen=0}
   get currentTime(){return this.on&&this.sc?this.t+(ctx().ac.currentTime-this.at):this.t}
@@ -695,26 +700,46 @@ function addLive(L,pick){
   bus.connect(dst);bus.connect(g);g.connect(ac.destination);
   tracks.push({el:o,src:{disconnect(){o.stop()}},dst,g,name:pick.name});ac.resume();
 }
+async function scan(f){
+  if(scanned&&scanned.file===f)return scanned;
+  try{scanned&&scanned.ff.terminate()}catch{}
+  const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil,logs=[],lg=({message})=>logs.push(message);
+  ff.on('log',lg);
+  const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
+  await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
+  const name='input.'+(f.name.split('.').pop()||'mkv');
+  await ff.createDir('/in');await ff.mount('WORKERFS',{files:[new File([f],name)]},'/in');
+  await ff.exec(['-i','/in/'+name]);ff.off('log',lg);
+  const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)/g,(m,i,l,c)=>{if(found.length<8)found.push({i:+i,l:l||'und',c:c.toLowerCase()})});
+  if(!found.length)throw new Error('no audio track found in this file');
+  const names=[];found.forEach(x=>{let n=nice(x.l),k=2;while(names.includes(n))n=nice(x.l)+' '+k++;names.push(n)});
+  const L={ff,name,file:f,found,names,q:Promise.resolve()};
+  L.run=fn=>{const p=L.q.then(()=>fn(ff));L.q=p.catch(()=>{});return p}; /* one decode at a time */
+  return scanned=L;
+}
+async function prepare(L,sel,keepTime){ /* play these languages live; restarts the movie (optionally at the same spot) */
+  L.picks=sel.map(i=>({i:L.found[i].i,name:L.names[i]}));liveSpec=L;
+  const v=$('#fv'),t=keepTime?v.currentTime:0;await loadFiles([L.file]);if(t>1)v.currentTime=t;
+}
+async function autoScan(f){ /* finds the movie's audio languages so everyone gets an Audio dropdown */
+  const r=$('#rdy');
+  try{
+    r.textContent='Looking for audio languages…';
+    const L=await scan(f);if(lastFile!==f)return;
+    r.textContent='';if(L.found.length<2)return;
+    const v=$('#fv'),all=L.found.map((x,k)=>k).slice(0,4);
+    if(v.paused&&v.currentTime<1){toast('Found '+L.found.length+' audio languages ('+L.names.slice(0,4).join(', ')+'). Preparing them…',5000);await prepare(L,all)}
+    else{aNames=L.names.slice(0,4);setAudioList()} /* movie already playing: choosing a language restarts it at the same spot */
+  }catch{r.textContent=''}
+}
 async function liveAudio(){
   const f=lastFile;if(!f)return;const b=$('#live');b.disabled=true;
   try{
     cv(null,'Loading converter (one-time, about 30 MB)…');
-    const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil,logs=[],lg=({message})=>logs.push(message);
-    ff.on('log',lg);
-    const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
-    await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
-    const name='input.'+(f.name.split('.').pop()||'mkv');
-    await ff.createDir('/in');await ff.mount('WORKERFS',{files:[new File([f],name)]},'/in');
-    await ff.exec(['-i','/in/'+name]);ff.off('log',lg);
-    const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)/g,(m,i,l,c)=>{if(found.length<8)found.push({i:+i,l:l||'und',c:c.toLowerCase()})});
-    if(!found.length)throw new Error('no audio track found in this file');
-    const names=[];found.forEach(x=>{let n=nice(x.l),k=2;while(names.includes(n))n=nice(x.l)+' '+k++;names.push(n)});
-    const sel=await chooseTracks(found.map((x,k)=>({...x,n:names[k],done:false})));
-    if(!sel.length){ff.terminate();sh($('#cv'),false);b.disabled=false;return}
-    cv(null,'Starting…');
-    const L={ff,name,file:f,q:Promise.resolve(),picks:sel.map(i=>({i:found[i].i,name:names[i]}))};
-    L.run=fn=>{const p=L.q.then(()=>fn(ff));L.q=p.catch(()=>{});return p}; /* one decode at a time */
-    liveSpec=L;await loadFiles([f]);sh($('#cv'),false);
+    const L=await scan(f);
+    const sel=await chooseTracks(L.found.map((x,k)=>({...x,n:L.names[k],done:false})));
+    if(!sel.length){sh($('#cv'),false);b.disabled=false;return}
+    cv(null,'Starting…');await prepare(L,sel);sh($('#cv'),false);
   }catch(e){sh($('#cv'),false);toast('Could not start live audio: '+(e.message||e),9000)}
   b.disabled=false;
 }
