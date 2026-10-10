@@ -75,6 +75,7 @@ aside{background:linear-gradient(#1c0d10,#120709);border:1px solid var(--line);b
 #stage>#cap{inset:auto 6% 54px 6%;height:auto;text-align:center;font-size:clamp(15px,2.3vw,28px);line-height:1.3;color:#fff;text-shadow:0 0 4px #000,0 2px 6px #000,0 0 12px #000;white-space:pre-line;pointer-events:none;z-index:2}
 #cc.on{background:linear-gradient(#f6cf78,#d49a2b);color:#2a1604;border-color:transparent}
 #ccbox{display:contents}
+#volw{display:flex;align-items:center;gap:6px}#volw input{width:90px;accent-color:var(--gold)}
 #stage>#osd{inset:14px auto auto 14px;width:auto;height:auto;max-width:70%;background:#000b;color:var(--cream);padding:6px 14px;border-radius:6px;font-weight:600;z-index:4;pointer-events:none}
 #stage:fullscreen #cap{font-size:clamp(22px,3vw,52px);bottom:90px}
 body.theatre #stage>#cap{font-size:clamp(18px,2.8vw,40px)}
@@ -126,7 +127,7 @@ body.theatre header:hover,body.theatre #tiles:hover,body.theatre #bar:hover{opac
    <div id="ctl" hidden><button id="gp" hidden>Pause</button><button id="fs">Fullscreen</button></div>
   </div>
   <div id="dock">
-   <button id="media">Join voice &amp; video</button><button id="mic" hidden>Mic</button><button id="cmt" hidden>Camera</button><span id="ccbox"><button id="cc">Captions: Off</button><select id="cl" hidden aria-label="Caption language" title="Subtitle track (shortcut: V)"></select><select id="al" hidden aria-label="Audio language" title="Audio track (shortcut: B, Shift+B for previous)"></select></span>
+   <button id="media">Join voice &amp; video</button><button id="mic" hidden>Mic</button><button id="cmt" hidden>Camera</button><span id="ccbox"><button id="cc">Captions: Off</button><select id="cl" hidden aria-label="Caption language" title="Subtitle track (shortcut: V)"></select><select id="al" hidden aria-label="Audio language" title="Audio track (shortcut: B, Shift+B for previous)"></select><label id="volw" title="Your own volume, up to 300% (Up/Down keys, M to mute)">🔊 <input type="range" id="vol" min="0" max="3" step="0.05" value="1"></label></span>
    <span class="sp"></span>
    <div id="reacts"><button>👍</button><button>😂</button><button>😮</button><button>❤️</button><button>👏</button><button>🔥</button></div>
   </div>
@@ -185,7 +186,7 @@ function start(host){
   peer.on('call',onCall);
   /* keep the room code alive: if the link to the signaling server drops (sleep, Wi-Fi blip), re-register the same code */
   peer.on('disconnected',()=>{const t=setInterval(()=>{if(peer.destroyed||!peer.disconnected)return clearInterval(t);try{peer.reconnect()}catch{}},3000)});
-  peer.on('error',e=>{$('#create').disabled=$('#join').disabled=false;toast(e.type==='peer-unavailable'?'Room not found. Check the code.':'Connection error: '+e.type);if(e.type==='peer-unavailable')setTimeout(()=>location.reload(),2200)});
+  peer.on('error',e=>{$('#create').disabled=$('#join').disabled=false;if(e.type==='peer-unavailable'&&(isHost||(hostConn&&hostConn.open)))return;toast(e.type==='peer-unavailable'?'Room not found. Check the code.':'Connection error: '+e.type);if(e.type==='peer-unavailable')setTimeout(()=>location.reload(),2200)});
 }
 function hostAccept(c){
   c.on('data',d=>{
@@ -194,12 +195,16 @@ function hostAccept(c){
       conns[c.peer]=c;users[c.peer]={name:String(d.name).slice(0,20)};
       send(c,{t:'init',users,S,mode,ytId});send(c,{t:'fstate',playing:mode==='file'&&!$('#fv').paused});send(c,{t:'langs',langs:fileLangs});send(c,{t:'cue',c:cueNow});send(c,{t:'alangs',names:aNames});
       bcast({t:'users',users});renderUsers();sys(users[c.peer].name+' joined');syncCalls();
-      if(movieStream)callMovie(c.peer);
+      if(movieStream)serve(c.peer);
     }else if(conns[c.peer]){
       if(d.t==='chat'&&S.chat){const m={t:'chat',from:users[c.peer].name,text:String(d.text).slice(0,500)};bcast(m,c.peer);addChat(m)}
       if(d.t==='yt'&&(S.control||adm(c.peer))){applyYT(d);bcast(d,c.peer)}
       if(d.t==='film'&&(S.fctl||adm(c.peer))&&mode==='file'&&movieStream){const v=$('#fv');if(d.a==='play')v.play().catch(()=>{});else if(d.a==='pause')v.pause()}
-      if(d.t==='resend'&&movieStream){const o=calls['movie:'+c.peer];if(o){o.close();delete calls['movie:'+c.peer]}callMovie(c.peer)}
+      if(d.t==='resend'&&movieStream){const o=calls['movie:'+c.peer];if(o){o.close();delete calls['movie:'+c.peer]}delete parentOf[c.peer];serve(c.peer)}
+      if(d.t==='live'){
+        if(Object.values(users).filter(u=>u.live).length<MAXLIVE){users[c.peer].live=true;bcast({t:'users',users});renderUsers()}
+        else{send(c,{t:'toast',text:'The voice & video group is full ('+MAXLIVE+' people). You can still watch, chat and react.'});send(c,{t:'livefull'})}
+      }
       if(d.t==='yturl'&&adm(c.peer)&&/^[\w-]{11}$/.test(d.id)){stopMovie();hostMode('yt',d.id)}
       if(d.t==='setting'&&adm(c.peer)&&S.hasOwnProperty(d.k)){S[d.k]=!!d.v;bcast({t:'settings',S});applySettings()}
       if(d.t==='admin'&&adm(c.peer)&&['mute','kick'].includes(d.a)&&users[d.id]&&!users[d.id].admin)hostAct(d.a,d.id);
@@ -209,7 +214,7 @@ function hostAccept(c){
   });
   c.on('close',()=>{
     if(!conns[c.peer])return;
-    sys(users[c.peer].name+' left');delete conns[c.peer];delete users[c.peer];
+    sys(users[c.peer].name+' left');delete conns[c.peer];delete users[c.peer];reparent(c.peer);
     bcast({t:'users',users});renderUsers();dropPeer(c.peer);
   });
 }
@@ -223,6 +228,8 @@ function guestRecv(d){
   else if(d.t==='react')float(d.e)
   else if(d.t==='fstate'){fplaying=d.playing;fbtn()}
   else if(d.t==='toast')toast(d.text)
+  else if(d.t==='relay'){if(d.reset)kids.clear();else{kids.add(d.to);if(relayStream)callKid(d.to)}}
+  else if(d.t==='livefull'){if(local){local.getTracks().forEach(t=>t.stop());local=null;dropTile(me.id)}sh($('#media'),true);sh($('#mic'),false);sh($('#cmt'),false)}
   else if(d.t==='langs'){fileLangs=d.langs;setLangs()}
   else if(d.t==='cue'){cueNow=d.c;renderCap()}
   else if(d.t==='alangs'){aNames=d.names;setAudioList()}
@@ -302,7 +309,7 @@ $('#media').onclick=async()=>{
     const gum=o=>navigator.mediaDevices.getUserMedia(o),A={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
     try{local=await gum({video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:24}},audio:A})}
     catch{local=await gum({audio:A});toast('No camera available. Joined with mic only.')}
-    addTile(me.id,local,true);sh($('#media'),false);sh($('#mic'),true);sh($('#cmt'),true);applySettings();syncCalls();
+    addTile(me.id,local,true);sh($('#media'),false);sh($('#mic'),true);sh($('#cmt'),true);applySettings();goLive();
   }catch{toast('Allow camera and microphone access to join the call')}
 };
 function toggle(btn,kind){
@@ -314,12 +321,12 @@ function callCam(id){
   const c=peer.call(id,local,{metadata:{type:'cam'}});calls['cam:'+id]=c;
   c.on('stream',s=>addTile(id,s));c.on('close',()=>delete calls['cam:'+id]);setTimeout(()=>capCam(c),1000);
 }
-function syncCalls(){if(local)for(const id in users)if(id!==me.id&&!calls['cam:'+id])callCam(id)}
+function syncCalls(){if(local&&users[me.id]&&users[me.id].live)for(const id in users)if(id!==me.id&&users[id].live&&!calls['cam:'+id])callCam(id)}
 function onCall(call){
   const t=call.metadata&&call.metadata.type;
   if(t==='movie'){
-    call.answer();
-    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.muted=false;g.play().catch(()=>{g.muted=true;g.play();sh($('#snd'),true)});const ga=()=>{gAudio=s.getAudioTracks();pickAudio(Math.max(0,Math.min(aSel,gAudio.length-1)))};ga();s.onaddtrack=ga;
+    call.answer(undefined,{sdpTransform:stereo});
+    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.muted=true;g.play().catch(()=>{});relayStream=s;kids.forEach(callKid); /* sound goes through the personal volume control instead */const ga=()=>{gAudio=s.getAudioTracks();wireGuestAudio(s);pickAudio(Math.max(0,Math.min(aSel,gAudio.length-1)))};ga();s.onaddtrack=ga;
       setTimeout(()=>{if(mode==='file'&&!g.videoWidth&&Date.now()-(onCall.rs||0)>60000){onCall.rs=Date.now();send(hostConn,{t:'resend'})}},6000);smooth(call);send(hostConn,{t:'ready'})});
   }else{
     call.answer(local||undefined);if(local)setTimeout(()=>capCam(call),1000);
@@ -343,7 +350,7 @@ function dropPeer(id){dropTile(id);['cam:','movie:'].forEach(p=>{if(calls[p+id])
 function setMode(m,id){
   mode=m;sh($('#ctl'),m==='file');sh($('#ph'),m==='none');sh($('#ytp'),m==='yt');sh($('#fvp'),m==='file'&&isHost);sh($('#gvp'),m==='file'&&!isHost);
   if(m!=='yt'&&ytOK)yt.pauseVideo();
-  if(m!=='file'&&!isHost)$('#gv').srcObject=null;
+  if(m!=='file'&&!isHost){$('#gv').srcObject=null;relayStream=null;kids.clear();Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>{calls[k].close();delete calls[k]})}
   if(m==='yt')loadYT(id);setLangs();setAudioList();
 }
 function hostMode(m,id){ytId=id||null;setMode(m,id);bcast({t:'mode',mode:m,id})}
@@ -404,12 +411,12 @@ const ctx=()=>sc||(sc={ac:new (window.AudioContext||window.webkitAudioContext)()
 function addTrack(file,name){ /* one hidden <audio> per language: heard here through a gain node AND sent to guests as its own audio track */
   const ac=ctx().ac,el=new Audio();el.src=URL.createObjectURL(file);el.preload='auto';
   const src=ac.createMediaElementSource(el),dst=ac.createMediaStreamDestination(),g=ac.createGain();
-  src.connect(dst);src.connect(g);g.connect(ac.destination);
+  src.connect(feed(ac,dst,1));src.connect(g);g.connect(feed(ac,ac.destination,1));
   tracks.push({el,src,dst,g,name});ac.resume();
 }
 function pickAudio(i){ /* choose which language YOU hear */
   aSel=i;
-  if(isHost)tracks.forEach((t,k)=>t.g.gain.value=k===i?1:0);
+  if(isHost)tracks.forEach((t,k)=>t.g.gain.value=k===i?vol:0);
   else if(gAudio)gAudio.forEach((t,k)=>t.enabled=k===i);
   $('#al').value=i;
 }
@@ -463,7 +470,8 @@ async function loadFiles(list){
   const vs=cap.call(v);
   for(let i=0;i<30&&!vs.getVideoTracks().length;i++)await new Promise(r=>setTimeout(r,100)); /* the picture track can appear a moment late */
   movieStream=tracks.length?new MediaStream([...vs.getVideoTracks(),...tracks.map(t=>t.dst.stream.getAudioTracks()[0])]):vs;
-  ready.clear();Object.keys(conns).forEach(callMovie);updReady();
+  if(!tracks.length){ wireGuestAudio(movieStream); $('#fv').muted = true; }
+  ready.clear();parentOf={};bcast({t:'relay',reset:1});Object.keys(conns).forEach(serve);updReady();
   await new Promise(r=>setTimeout(r,1800));
   const bad=!tracks.length&&(!movieStream.getAudioTracks().length||v.webkitAudioDecodedByteCount===0||v.mozHasAudio===false);
   v.pause();v.currentTime=0;syncAudio.hold=false;
@@ -472,7 +480,7 @@ async function loadFiles(list){
 }
 function callMovie(id){
   if(!movieStream)return;
-  const c=peer.call(id,movieStream,{metadata:{type:'movie'}});calls['movie:'+id]=c;
+  const c=peer.call(id,movieStream,{metadata:{type:'movie'},sdpTransform:h264});calls['movie:'+id]=c;
   [800,3000].forEach(ms=>setTimeout(()=>boost(c),ms));
 }
 function boost(c){ /* cap bitrate by chosen quality; balanced mode drops frames gracefully instead of stalling */
@@ -499,19 +507,19 @@ function float(e){
 document.querySelectorAll('#reacts button').forEach(b=>b.onclick=()=>{
   const e=b.textContent;float(e);isHost?bcast({t:'react',e}):send(hostConn,{t:'react',e});
 });
-/* guests buffer ~1.5s: movies don't need low latency, and this hides network jitter */
+/* guests buffer ~0.5s: movies don't need low latency, and this hides network jitter */
 function smooth(c){[500,2500].forEach(ms=>setTimeout(()=>{try{c.peerConnection.getReceivers().forEach(r=>{
-  if('jitterBufferTarget' in r)r.jitterBufferTarget=1500;if('playoutDelayHint' in r)r.playoutDelayHint=1.5})}catch{}},ms))}
+  if('jitterBufferTarget' in r)r.jitterBufferTarget=500;if('playoutDelayHint' in r)r.playoutDelayHint=0.5})}catch{}},ms))}
 /* webcams stay light so they never compete with the movie for bandwidth */
 function capCam(c){try{c.peerConnection.getSenders().forEach(s=>{if(s.track&&s.track.kind==='video'){
   const p=s.getParameters();p.encodings=p.encodings&&p.encodings.length?p.encodings:[{}];p.encodings[0].maxBitrate=4e5;s.setParameters(p).catch(()=>{})}})}catch{}}
 $('#q').onchange=()=>Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>boost(calls[k]));
 $('#fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():$('#stage').requestFullscreen();
 /* movie volume is locked at 100% everywhere (use your device volume to adjust) */
-['fv','gv','fa'].forEach(id=>{const e=$('#'+id);e.volume=1;e.addEventListener('volumechange',()=>{if(e.volume!==1)e.volume=1})});
-$('#gv').onclick=()=>{$('#gv').muted=false};
 
-$('#snd').onclick=()=>{document.querySelectorAll('.tile video,#gv').forEach(v=>{v.muted=v.dataset.self==='1';v.play().catch(()=>{})});sh($('#snd'),false)};
+$('#gv').onclick=()=>ctx().ac.resume();
+
+$('#snd').onclick=()=>{ctx().ac.resume();document.querySelectorAll('.tile video').forEach(v=>{v.muted=v.dataset.self==='1';v.play().catch(()=>{})});sh($('#snd'),false)};
 
 /* In-browser audio fix: copy the video untouched, re-encode only the audio to AAC (ffmpeg.wasm, runs locally) */
 function cv(p,t){const e=$('#cv');sh(e,true);e.classList.toggle('ind',p==null);$('#cvb').style.width=(p==null?100:p)+'%';$('#cvt').textContent=t}
@@ -592,7 +600,7 @@ function closeRoom(){
   history.replaceState(null,'',location.pathname+location.search);location.reload();
 }
 $('#leave').onclick=()=>{if(!isHost||confirm('End the room for everyone? The room code and invite link will stop working.'))closeRoom()};
-addEventListener('pagehide',()=>{if(peer&&!peer.destroyed)try{peer.destroy()}catch{}});
+window.addEventListener('beforeunload', () => { if (peer && !peer.destroyed) try { peer.destroy(); } catch {} });
 
 /* ---------- captions (each viewer picks their own on/off and language) ---------- */
 let caps={},fileLangs=[],cueNow={},ccOn=false,ccLang='',ytLangs=[];
@@ -718,7 +726,7 @@ class LiveAudio{ /* plays one language in 30 s pieces: from the saved cache when
 }
 function addLive(L,pick){
   const ac=ctx().ac,dst=ac.createMediaStreamDestination(),g=ac.createGain(),bus=ac.createGain(),o=new LiveAudio(L,pick.i,bus);
-  bus.connect(dst);bus.connect(g);g.connect(ac.destination);
+  bus.connect(feed(ac,dst,pick.boost));bus.connect(g);g.connect(feed(ac,ac.destination,pick.boost));
   tracks.push({el:o,src:{disconnect(){o.stop()}},dst,g,name:pick.name});ac.resume();
 }
 async function scan(f){
@@ -731,7 +739,7 @@ async function scan(f){
   const name='input.'+(f.name.split('.').pop()||'mkv');
   await ff.createDir('/in');await ff.mount('WORKERFS',{files:[new File([f],name)]},'/in');
   await ff.exec(['-i','/in/'+name]);ff.off('log',lg);
-  const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)/g,(m,i,l,c)=>{if(found.length<8)found.push({i:+i,l:l||'und',c:c.toLowerCase()})});
+  const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)([^\n]*)/g,(m,i,l,c,rest)=>{if(found.length<8)found.push({i:+i,l:l||'und',c:c.toLowerCase(),b:/Hz, (?:5|6|7|quad|4\.)/.test(rest)?2.2:1})});
   if(!found.length)throw new Error('no audio track found in this file');
   const names=[];found.forEach(x=>{let n=nice(x.l),k=2;while(names.includes(n))n=nice(x.l)+' '+k++;names.push(n)});
   const L={ff,name,file:f,found,names,q:Promise.resolve()};
@@ -739,7 +747,7 @@ async function scan(f){
   return scanned=L;
 }
 async function prepare(L,sel,keepTime){ /* play these languages live; restarts the movie (optionally at the same spot) */
-  L.picks=sel.map(i=>({i:L.found[i].i,name:L.names[i]}));liveSpec=L;
+  L.picks=sel.map(i=>({i:L.found[i].i,name:L.names[i],boost:L.found[i].b}));liveSpec=L;
   const v=$('#fv'),t=keepTime?v.currentTime:0;await loadFiles([L.file]);if(t>1)v.currentTime=t;
 }
 async function autoScan(f){ /* finds the movie's audio languages so everyone gets an Audio dropdown */
@@ -787,7 +795,45 @@ document.addEventListener('keydown',e=>{ /* VLC-style: B = next audio track (Shi
     if(aNames.length<2)return osd('This movie has only one audio track');
     chooseAudio((aSel+(e.shiftKey?-1:1)+aNames.length)%aNames.length);
   }else if(k==='v')cycleCC();
+  else if(k==='arrowup'||k==='arrowdown'){if(e.target.closest&&e.target.closest('video'))return;e.preventDefault();setVol(vol+(k==='arrowup'?.05:-.05),1)}
+  else if(k==='m'){if(vol>0){pre=vol;setVol(0,1)}else setVol(pre||1,1)}
 });
+
+/* ---------- your own volume + bigger rooms ---------- */
+let vol=1,pre=1,gOut=null,gSrc=[],relayStream=null,parentOf={};const kids=new Set(),FAN=30,MAXLIVE=8;
+try{vol=+(localStorage.getItem('wr-vol')||1)}catch{}
+const stereo=sdp=>sdp.replace(/(a=fmtp:\d+ [^\r\n]*useinbandfec=1)/g,'$1;stereo=1;sprop-stereo=1;maxaveragebitrate=128000'); /* full stereo, not mono */
+const h264=sdp=>{const pts=[...sdp.matchAll(/a=rtpmap:(\d+) H264\/90000/g)].map(m=>m[1]);if(!pts.length)return sdp; /* prefer hardware-accelerated H.264 */
+  return sdp.replace(/m=video (\d+) ([\w/]+) ([\d ]+)/,(m,p,q,l)=>'m=video '+p+' '+q+' '+[...pts,...l.trim().split(' ').filter(x=>!pts.includes(x))].join(' '))};
+function feed(ac,dst,b){const g=ac.createGain(),c=ac.createDynamicsCompressor();g.gain.value=b||1;c.threshold.value=-2;c.knee.value=0;c.ratio.value=20;c.attack.value=.003;c.release.value=.2;g.connect(c);c.connect(dst);return g}
+function setVol(x,say){vol=Math.max(0,Math.min(3,x));try{localStorage.setItem('wr-vol',vol)}catch{}$('#vol').value=vol;applyVol();if(say)osd(vol?'Volume '+Math.round(vol*100)+'%':'Muted')}
+function applyVol(){ /* only changes what THIS person hears; nobody else is affected */
+  if(isHost){tracks.forEach((t,k)=>t.g.gain.value=k===aSel?vol:0);}
+  if(gOut)gOut.gain.value=vol;
+}
+function wireGuestAudio(s){ /* guests hear the movie through their own volume control (up to 300%) with a limiter against distortion */
+  const ac=ctx().ac;
+  if(!gOut){gOut=ac.createGain();gOut.connect(ac.destination);}
+  gSrc.forEach(n=>{try{n.disconnect()}catch{}});
+  gSrc=s.getAudioTracks().map(t=>{const n=ac.createMediaStreamSource(new MediaStream([t]));n.connect(gOut);return n});
+  gOut.gain.value=vol;ac.resume();if(ac.state!=='running')sh($('#snd'),true);
+}
+$('#vol').oninput=e=>setVol(+e.target.value);
+/* movie tree: the host feeds 3 guests, each of those feeds 3 more, and so on, so the host's upload never grows with the audience */
+function serve(id){
+  const n=q=>Object.keys(parentOf).filter(k=>parentOf[k]===q).length;
+  let q=me.id;if(n(me.id)>=FAN)q=Object.keys(parentOf).find(g=>conns[g]&&n(g)<FAN)||me.id;
+  parentOf[id]=q;
+  if(q===me.id)callMovie(id);else send(conns[q],{t:'relay',to:id});
+}
+function reparent(gone){delete parentOf[gone];if(!movieStream)return;Object.keys(parentOf).filter(k=>parentOf[k]===gone).forEach(k=>{delete parentOf[k];serve(k)})}
+function callKid(k){
+  if(!relayStream)return;try{calls['movie:'+k]&&calls['movie:'+k].close()}catch{}
+  const c=peer.call(k,relayStream,{metadata:{type:'movie'},sdpTransform:h264});calls['movie:'+k]=c;[800,3000].forEach(ms=>setTimeout(()=>boost(c),ms));
+}
+/* voice & video is a small group (mesh); everyone else watches, chats and reacts */
+function goLive(){if(isHost){users[me.id].live=true;bcast({t:'users',users});renderUsers();syncCalls()}else send(hostConn,{t:'live'})}
+setVol(vol);
 
 /* ---------- wiring ---------- */
 $('#create').onclick=()=>start(true);$('#join').onclick=()=>start(false);
