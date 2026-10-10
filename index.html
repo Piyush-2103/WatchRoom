@@ -74,6 +74,8 @@ aside{background:linear-gradient(#1c0d10,#120709);border:1px solid var(--line);b
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--cream);color:#2a1604;padding:10px 18px;border-radius:10px;font-weight:600;z-index:9;max-width:min(560px,92vw);box-shadow:0 8px 30px #000a}
 #stage>#cap{inset:auto 6% 54px 6%;height:auto;text-align:center;font-size:clamp(15px,2.3vw,28px);line-height:1.3;color:#fff;text-shadow:0 0 4px #000,0 2px 6px #000,0 0 12px #000;white-space:pre-line;pointer-events:none;z-index:2}
 #cc.on{background:linear-gradient(#f6cf78,#d49a2b);color:#2a1604;border-color:transparent}
+dialog{background:#1c0d10;color:var(--cream);border:1px solid var(--gold2);border-radius:12px;padding:20px;max-width:min(420px,92vw)}
+dialog::backdrop{background:#000a}dialog h3{margin:0 0 6px}dialog p{margin:0 0 10px;color:var(--mut)}dialog .row{justify-content:flex-end;margin-top:14px}
 #cv{display:flex;align-items:center;gap:12px}
 #cv .trk{flex:1;height:12px;border-radius:99px;background:#0009;border:1px solid var(--gold2);overflow:hidden}
 #cvb{height:100%;width:0;background:linear-gradient(90deg,#a77a1e,#f6cf78);box-shadow:0 0 12px #e9b44c;transition:width .4s}
@@ -138,6 +140,7 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
    <label class="opt"><input type="checkbox" id="s-fctl"><div>Guests play/pause the movie<small>Let guests pause and resume your local video</small></div></label>
    <label class="opt"><input type="checkbox" id="s-react"><div>Reactions<small>Let guests send emoji reactions</small></div></label>
    <label class="opt"><input type="checkbox" id="s-locked"><div>Lock room<small>Block new people from joining</small></div></label>
+   <button id="clr" class="ho">Clear saved audio &amp; subtitles</button>
   </div>
  </aside>
 </div>
@@ -379,6 +382,16 @@ $('#pick').onclick=()=>$('#file').click();
 let lastFile=null,sc=null;
 const isAud=f=>/^audio\//.test(f.type)||/\.(m4a|aac|mka|opus|mp3|ogg|wav|flac)$/i.test(f.name);
 $('#file').onchange=e=>loadFiles([...e.target.files]);
+/* cache: stored in the browser's private file storage (disk-backed, not RAM), keyed by the movie's size + date */
+const ckey=f=>f.size+'_'+f.lastModified;
+async function cdir(f,create){const r=await navigator.storage.getDirectory(),w=await r.getDirectoryHandle('wr-cache',{create:true});return w.getDirectoryHandle(ckey(f),{create})}
+async function cput(f,name,data){const d=await cdir(f,true),h=await d.getFileHandle(name,{create:true}),w=await h.createWritable();await w.write(data);await w.close();return h.getFile()}
+async function cget(f){
+  const o={audio:[],subs:[]};
+  try{const d=await cdir(f,false);for await(const [n,h] of d.entries()){const x=await h.getFile();(n.endsWith('.vtt')?o.subs:o.audio).push(x)}}catch{}
+  o.audio.sort((a,b)=>a.name<b.name?-1:1);o.subs.sort((a,b)=>a.name<b.name?-1:1);return o;
+}
+$('#clr').onclick=async()=>{try{const r=await navigator.storage.getDirectory();await r.removeEntry('wr-cache',{recursive:true});toast('Saved audio and subtitles cleared')}catch{toast('Nothing saved yet')}};
 let tracks=[],aSel=0,aNames=[],gAudio=null;
 const ctx=()=>sc||(sc={ac:new (window.AudioContext||window.webkitAudioContext)()});
 function addTrack(file,name){ /* one hidden <audio> per language: heard here through a gain node AND sent to guests as its own audio track */
@@ -410,6 +423,9 @@ async function loadFiles(list){
   const subs=list.filter(isSub),auds=list.filter(isAud),f=list.find(x=>!isAud(x)&&!isSub(x));
   if(!f&&subs.length&&lastFile)return addSubFiles(subs); /* adding subtitles to the movie that is already loaded */
   if(!f)return toast('Choose the movie file. You can also pick saved audio files and subtitles together with it.');
+  const c=await cget(f); /* reuse audio/subtitles extracted earlier */
+  if(!auds.length)auds.push(...c.audio);if(!subs.length)subs.push(...c.subs);
+  if(c.audio.length&&!list.some(isAud))toast('Using the audio saved in this browser for this movie');
   lastFile=f;stopMovie();resetCaps();sh($('#subx'),true);sh($('#fix'),true);if(subs.length)addSubFiles(subs);
   const v=$('#fv');v.src=URL.createObjectURL(f);v.muted=!!auds.length;hostMode('file');
   auds.forEach(x=>{const m=x.name.match(/.* - ([^.]+)\.\w+$/);addTrack(x,m?m[1]:x.name.replace(/\.\w+$/,''))});
@@ -470,13 +486,21 @@ $('#snd').onclick=()=>{document.querySelectorAll('.tile video,#gv').forEach(v=>{
 
 /* In-browser audio fix: copy the video untouched, re-encode only the audio to AAC (ffmpeg.wasm, runs locally) */
 function cv(p,t){const e=$('#cv');sh(e,true);e.classList.toggle('ind',p==null);$('#cvb').style.width=(p==null?100:p)+'%';$('#cvt').textContent=t}
-async function fixAudio(){ /* extracts EVERY audio track (all dubs) as separate .m4a files, saved straight to disk */
-  const f=lastFile;if(!f)return;
-  const base=f.name.replace(/\.\w+$/,''),b=$('#fix');
-  let dir=null; /* choose a folder BEFORE the long job (needs a fresh click) */
-  if(window.showDirectoryPicker){try{dir=await showDirectoryPicker({mode:'readwrite'})}catch(e){if(e.name==='AbortError')return}}
-  b.disabled=true;
+function chooseTracks(list){
+  if(list.length===1)return Promise.resolve([0]);
+  return new Promise(res=>{
+    const d=document.createElement('dialog'),fm=document.createElement('form');fm.method='dialog';
+    fm.innerHTML='<h3>Which audio languages do you need?</h3><p>Every language adds extraction time, so pick only what you need.</p>';
+    list.forEach(x=>{const l=document.createElement('label');l.className='opt';l.innerHTML='<input type="checkbox"><div></div>';l.firstChild.checked=!x.done;l.firstChild.disabled=x.done;l.lastChild.textContent=x.n+' ('+x.c+')'+(x.done?' · already saved':'');fm.append(l)});
+    const r=document.createElement('div');r.className='row';r.innerHTML='<button value="no">Cancel</button><button value="go" class="pri">Extract</button>';fm.append(r);d.append(fm);document.body.append(d);
+    d.onclose=()=>{res(d.returnValue==='go'?[...fm.querySelectorAll('input')].map((c,i)=>c.checked&&!c.disabled?i:-1).filter(i=>i>=0):[]);d.remove()};
+    d.showModal();
+  });
+}
+async function fixAudio(){ /* extract the chosen languages ONCE, keep them in this browser, reuse them automatically next time */
+  const f=lastFile;if(!f)return;const b=$('#fix');b.disabled=true;
   try{
+    if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
     cv(null,'Loading converter (one-time, about 30 MB)…');
     const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil,logs=[];let t1=Date.now();
     ff.on('log',({message})=>logs.push(message));
@@ -486,21 +510,23 @@ async function fixAudio(){ /* extracts EVERY audio track (all dubs) as separate 
     const src=new File([f],'input.'+(f.name.split('.').pop()||'mkv'));
     await ff.createDir('/in');await ff.mount('WORKERFS',{files:[src]},'/in'); /* streams the movie from disk, never loads all 3 GB */
     await ff.exec(['-i','/in/'+src.name]); /* only lists the streams (ends with a harmless "no output" error) */
-    const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)/g,(m,i,l)=>{if(found.length<6)found.push({i:+i,l:l||'und'})});
+    const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)/g,(m,i,l,c)=>{if(found.length<8)found.push({i:+i,l:l||'und',c:c.toLowerCase()})});
     if(!found.length)throw new Error('no audio track found in this file');
-    const names=[];found.forEach(x=>{let n=nice(x.l),k=2;while(names.includes(n))n=nice(x.l)+' '+k++;names.push(n)});
-    const args=['-i','/in/'+src.name];found.forEach((x,k)=>args.push('-map','0:'+x.i,'-vn','-c:a','aac','-b:a','128k','-ac','2','a'+k+'.m4a'));
-    t1=Date.now();cv(0,'Extracting '+found.length+' audio track'+(found.length>1?'s':'')+'… 0%');
+    const have=(await cget(f)).audio.map(x=>(x.name.match(/.* - ([^.]+)\.\w+$/)||[])[1]),names=[];
+    found.forEach(x=>{let n=nice(x.l),k=2;while(names.includes(n))n=nice(x.l)+' '+k++;names.push(n)});
+    cv(null,'Choose the languages to extract…');
+    const sel=await chooseTracks(found.map((x,k)=>({...x,n:names[k],done:have.includes(names[k])})));
+    if(!sel.length){ff.terminate();sh($('#cv'),false);b.disabled=false;return}
+    /* already-decodable audio (AAC, MP3, Opus, Vorbis, FLAC) is copied untouched = very fast; only AC3/DTS-type audio is re-encoded (fast AAC mode) */
+    const CP={aac:'m4a',mp3:'mp3',opus:'opus',vorbis:'ogg',flac:'flac'},args=['-i','/in/'+src.name],jobs=[];
+    sel.forEach((i,j)=>{const x=found[i],ext=CP[x.c]||'m4a',tmp='a'+j+'.'+ext;jobs.push({i,ext,tmp});
+      args.push('-map','0:'+x.i,'-vn',...(CP[x.c]?['-c:a','copy']:['-c:a','aac','-aac_coder','fast','-b:a','128k','-ac','2']),tmp)});
+    t1=Date.now();cv(0,'Extracting '+sel.length+' audio track'+(sel.length>1?'s':'')+'… 0%');
     const code=await ff.exec(args);if(code)throw new Error('could not convert the audio (exit '+code+')');
-    const outs=[];
-    for(let k=0;k<found.length;k++){
-      const fn=base+' - '+names[k]+'.m4a',data=await ff.readFile('a'+k+'.m4a');await ff.deleteFile('a'+k+'.m4a');
-      if(dir){const h=await dir.getFileHandle(fn,{create:true}),w=await h.createWritable();await w.write(data);await w.close();outs.push(await h.getFile())}
-      else{const out=new File([data],fn,{type:'audio/mp4'}),x=document.createElement('a');x.href=URL.createObjectURL(out);x.download=fn;x.click();outs.push(out)}
-    }
-    ff.terminate();cv(100,'Done');setTimeout(()=>sh($('#cv'),false),2500);
-    toast('Saved '+outs.length+' audio track'+(outs.length>1?'s':'')+'. Next time choose the movie and these .m4a files together to skip this step.',9000);
-    await loadFiles([f,...outs]);
+    let n=have.length;
+    for(const j of jobs){const data=await ff.readFile(j.tmp);await ff.deleteFile(j.tmp);await cput(f,(++n)+' - '+names[j.i]+'.'+j.ext,data)}
+    ff.terminate();cv(100,'Saved in this browser',);setTimeout(()=>sh($('#cv'),false),2500);
+    await loadFiles([f]); /* picks the saved tracks up automatically */
   }catch(e){sh($('#cv'),false);toast('Conversion failed: '+(e.message||e),9000)}
   b.disabled=false;
 }
@@ -511,7 +537,7 @@ let fplaying=false;
 const adm=id=>!!(users[id]&&(users[id].admin||users[id].host)),isAdm=()=>isHost||adm(me.id);
 function applyRole(){
   const a=isAdm();sh($('#tabadm'),a);sh($('#bar'),a);
-  document.querySelectorAll('#bar .ho').forEach(e=>e.hidden=!isHost);
+  document.querySelectorAll('#bar .ho,#adm .ho').forEach(e=>e.hidden=!isHost);
   if(!a&&!$('#adm').hidden)$('#tabchat').click();
   applySettings();
 }
@@ -601,7 +627,7 @@ async function extractSubs(){
     const args=['-i','/in/'+src.name];found.forEach((x,k)=>args.push('-map','0:'+x.i,'-c:s','webvtt','s'+k+'.vtt'));
     cv(0,'Reading subtitles… 0%');
     const code=await ff.exec(args);if(code)throw new Error('could not read the subtitles (exit '+code+')');
-    for(let k=0;k<found.length;k++)addSubs(found[k].l,new TextDecoder().decode(await ff.readFile('s'+k+'.vtt')));
+    for(let k=0;k<found.length;k++){const t=new TextDecoder().decode(await ff.readFile('s'+k+'.vtt'));addSubs(found[k].l,t);cput(f,'sub '+(k+1)+' - '+nice(found[k].l)+'.vtt',t).catch(()=>{})}
     ff.terminate();
   }catch(e){toast('Could not extract subtitles: '+(e.message||e),9000)}
   sh($('#cv'),false);b.disabled=false;
