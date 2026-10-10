@@ -72,6 +72,8 @@ aside{background:linear-gradient(#1c0d10,#120709);border:1px solid var(--line);b
 .opt input{accent-color:var(--gold)}.opt small{color:var(--mut);display:block}
 #snd{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:8;box-shadow:0 8px 30px #000a}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--cream);color:#2a1604;padding:10px 18px;border-radius:10px;font-weight:600;z-index:9;max-width:min(560px,92vw);box-shadow:0 8px 30px #000a}
+#stage>#cap{inset:auto 6% 54px 6%;height:auto;text-align:center;font-size:clamp(15px,2.3vw,28px);line-height:1.3;color:#fff;text-shadow:0 0 4px #000,0 2px 6px #000,0 0 12px #000;white-space:pre-line;pointer-events:none;z-index:2}
+#cc.on{background:linear-gradient(#f6cf78,#d49a2b);color:#2a1604;border-color:transparent}
 #cv{display:flex;align-items:center;gap:12px}
 #cv .trk{flex:1;height:12px;border-radius:99px;background:#0009;border:1px solid var(--gold2);overflow:hidden}
 #cvb{height:100%;width:0;background:linear-gradient(90deg,#a77a1e,#f6cf78);box-shadow:0 0 12px #e9b44c;transition:width .4s}
@@ -103,8 +105,8 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
  <main>
   <div id="bar" hidden>
    <input id="yturl" placeholder="Paste a YouTube link" aria-label="YouTube link"><button id="loadyt">Play YouTube</button>
-   <button id="pick" class="pri ho">Choose movie</button><input type="file" id="file" accept="video/*,audio/*,.mkv,.m4a,.mka" multiple hidden>
-   <select id="q" class="ho" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><button id="fix" class="pri" hidden>Fix audio</button><span id="rdy"></span>
+   <button id="pick" class="pri ho">Choose movie</button><input type="file" id="file" accept="video/*,audio/*,.mkv,.m4a,.mka,.srt,.vtt" multiple hidden>
+   <select id="q" class="ho" aria-label="Stream quality"><option value="720">720p smooth</option><option value="1080">1080p</option><option value="480">480p</option></select><button id="fix" class="pri" hidden>Audio tracks</button><button id="subx" hidden>Extract subtitles</button><span id="rdy"></span>
   </div>
   <div id="cv" hidden><div class="trk"><div id="cvb"></div></div><span id="cvt"></span></div>
   <div id="stage">
@@ -113,10 +115,11 @@ body.theatre header:hover,body.theatre #dock:hover,body.theatre #tiles:hover,bod
    <div id="fvp" hidden><video id="fv" controls playsinline></video></div>
    <div id="gvp" hidden><video id="gv" playsinline></video></div>
    <div id="rx"></div>
+   <div id="cap" hidden></div>
    <div id="ctl" hidden><button id="gp" hidden>Pause</button><button id="fs">Fullscreen</button></div>
   </div>
   <div id="dock">
-   <button id="media">Join voice &amp; video</button><button id="mic" hidden>Mic</button><button id="cmt" hidden>Camera</button>
+   <button id="media">Join voice &amp; video</button><button id="mic" hidden>Mic</button><button id="cmt" hidden>Camera</button><button id="cc">Captions: Off</button><select id="cl" hidden aria-label="Caption language"></select><select id="al" hidden aria-label="Audio language"></select>
    <span class="sp"></span>
    <div id="reacts"><button>👍</button><button>😂</button><button>😮</button><button>❤️</button><button>👏</button><button>🔥</button></div>
   </div>
@@ -181,7 +184,7 @@ function hostAccept(c){
     if(d.t==='hello'){
       if(S.locked){send(c,{t:'denied'});return setTimeout(()=>c.close(),400)}
       conns[c.peer]=c;users[c.peer]={name:String(d.name).slice(0,20)};
-      send(c,{t:'init',users,S,mode,ytId});send(c,{t:'fstate',playing:mode==='file'&&!$('#fv').paused});
+      send(c,{t:'init',users,S,mode,ytId});send(c,{t:'fstate',playing:mode==='file'&&!$('#fv').paused});send(c,{t:'langs',langs:fileLangs});send(c,{t:'cue',c:cueNow});send(c,{t:'alangs',names:aNames});
       bcast({t:'users',users});renderUsers();sys(users[c.peer].name+' joined');syncCalls();
       if(movieStream)callMovie(c.peer);
     }else if(conns[c.peer]){
@@ -211,6 +214,9 @@ function guestRecv(d){
   else if(d.t==='react')float(d.e)
   else if(d.t==='fstate'){fplaying=d.playing;fbtn()}
   else if(d.t==='toast')toast(d.text)
+  else if(d.t==='langs'){fileLangs=d.langs;setLangs()}
+  else if(d.t==='cue'){cueNow=d.c;renderCap()}
+  else if(d.t==='alangs'){aNames=d.names;setAudioList()}
   else if(d.t==='kick'){toast('The host removed you from the room');setTimeout(()=>location.reload(),1500)}
   else if(d.t==='mute'){setTrack('audio',false);toast('The host muted you')}
   else if(d.t==='denied')toast('This room is locked')
@@ -304,7 +310,7 @@ function onCall(call){
   const t=call.metadata&&call.metadata.type;
   if(t==='movie'){
     call.answer();
-    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.muted=false;g.play().catch(()=>{g.muted=true;g.play();sh($('#snd'),true)});smooth(call);send(hostConn,{t:'ready'})});
+    call.on('stream',s=>{const g=$('#gv');g.srcObject=s;g.muted=false;g.play().catch(()=>{g.muted=true;g.play();sh($('#snd'),true)});gAudio=s.getAudioTracks();pickAudio(Math.max(0,Math.min(aSel,gAudio.length-1)));smooth(call);send(hostConn,{t:'ready'})});
   }else{
     call.answer(local||undefined);if(local)setTimeout(()=>capCam(call),1000);
     call.on('stream',s=>addTile(call.peer,s));call.on('close',()=>dropTile(call.peer));
@@ -328,7 +334,7 @@ function setMode(m,id){
   mode=m;sh($('#ctl'),m==='file');sh($('#ph'),m==='none');sh($('#ytp'),m==='yt');sh($('#fvp'),m==='file'&&isHost);sh($('#gvp'),m==='file'&&!isHost);
   if(m!=='yt'&&ytOK)yt.pauseVideo();
   if(m!=='file'&&!isHost)$('#gv').srcObject=null;
-  if(m==='yt')loadYT(id);
+  if(m==='yt')loadYT(id);setLangs();setAudioList();
 }
 function hostMode(m,id){ytId=id||null;setMode(m,id);bcast({t:'mode',mode:m,id})}
 
@@ -338,13 +344,13 @@ function ytReady(cb){
   const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.append(s);
   window.onYouTubeIframeAPIReady=cb;
 }
-function loadYT(id){
+function loadYT(id){ytLangs=[];ytTracks.id=null;
   ytId=id;
   ytReady(()=>{
     if(yt){if(ytOK)yt.loadVideoById(id);return}
     yt=new YT.Player('yt',{playerVars:{rel:0,playsinline:1},events:{
       onReady:()=>{ytOK=true;yt.loadVideoById(ytId);yt.setPlaybackQuality('hd1080')},
-      onStateChange:e=>{
+      onStateChange:e=>{if(e.data===1)ytTracks();
         if(applying||!(isAdm()||S.control))return;
         if(e.data===1||e.data===2){
           const m={t:'yt',a:e.data===1?'play':'pause',time:yt.getCurrentTime()};
@@ -373,31 +379,51 @@ $('#pick').onclick=()=>$('#file').click();
 let lastFile=null,sc=null;
 const isAud=f=>/^audio\//.test(f.type)||/\.(m4a|aac|mka|opus|mp3|ogg|wav|flac)$/i.test(f.name);
 $('#file').onchange=e=>loadFiles([...e.target.files]);
-function sideStream(a){ /* plays the separate audio file here AND feeds it into the stream guests receive */
-  if(!sc){const ac=new (window.AudioContext||window.webkitAudioContext)(),src=ac.createMediaElementSource(a),dst=ac.createMediaStreamDestination(),g=ac.createGain();src.connect(dst);src.connect(g);g.connect(ac.destination);sc={ac,dst,g}}
-  sc.ac.resume();return sc.dst.stream;
+let tracks=[],aSel=0,aNames=[],gAudio=null;
+const ctx=()=>sc||(sc={ac:new (window.AudioContext||window.webkitAudioContext)()});
+function addTrack(file,name){ /* one hidden <audio> per language: heard here through a gain node AND sent to guests as its own audio track */
+  const ac=ctx().ac,el=new Audio();el.src=URL.createObjectURL(file);el.preload='auto';
+  const src=ac.createMediaElementSource(el),dst=ac.createMediaStreamDestination(),g=ac.createGain();
+  src.connect(dst);src.connect(g);g.connect(ac.destination);
+  tracks.push({el,src,dst,g,name});ac.resume();
 }
-function syncAudio(v,a){
-  const go=()=>{a.currentTime=v.currentTime;a.play().catch(()=>{})};
-  v.onplay=v.onplaying=go;v.onpause=v.onwaiting=()=>a.pause();v.onseeked=()=>{a.currentTime=v.currentTime};v.onratechange=()=>{a.playbackRate=v.playbackRate};
-  syncAudio.t=setInterval(()=>{if(!v.paused&&Math.abs(a.currentTime-v.currentTime)>.25)a.currentTime=v.currentTime},1000);
+function pickAudio(i){ /* choose which language YOU hear */
+  aSel=i;
+  if(isHost)tracks.forEach((t,k)=>t.g.gain.value=k===i?1:0);
+  else if(gAudio)gAudio.forEach((t,k)=>t.enabled=k===i);
+  $('#al').value=i;
+}
+function setAudioList(){
+  const s=$('#al');s.innerHTML='';
+  aNames.forEach((n,i)=>{const o=document.createElement('option');o.value=i;o.textContent='Audio: '+n;s.append(o)});
+  sh(s,aNames.length>1&&mode==='file');s.value=aSel;
+}
+$('#al').onchange=e=>pickAudio(+e.target.value);
+function syncAudio(v){ /* keep every language track locked to the video */
+  const els=()=>tracks.map(t=>t.el);
+  const go=()=>els().forEach(a=>{a.currentTime=v.currentTime;a.play().catch(()=>{})});
+  v.onplay=v.onplaying=go;v.onpause=v.onwaiting=()=>els().forEach(a=>a.pause());
+  v.onseeked=()=>els().forEach(a=>{a.currentTime=v.currentTime});v.onratechange=()=>els().forEach(a=>{a.playbackRate=v.playbackRate});
+  syncAudio.t=setInterval(()=>{if(!v.paused)els().forEach(a=>{if(Math.abs(a.currentTime-v.currentTime)>.25)a.currentTime=v.currentTime})},1000);
 }
 async function loadFiles(list){
-  const aud=list.find(isAud),f=list.find(x=>!isAud(x));
-  if(!f)return toast('Choose the movie file. You can also pick a saved fixed-audio file together with it.');
-  lastFile=f;sh($('#fix'),false);stopMovie();
-  const v=$('#fv'),a=$('#fa');v.src=URL.createObjectURL(f);v.muted=!!aud;hostMode('file');
-  let side=null;if(aud){a.src=URL.createObjectURL(aud);side=sideStream(a);syncAudio(v,a)}
+  const subs=list.filter(isSub),auds=list.filter(isAud),f=list.find(x=>!isAud(x)&&!isSub(x));
+  if(!f&&subs.length&&lastFile)return addSubFiles(subs); /* adding subtitles to the movie that is already loaded */
+  if(!f)return toast('Choose the movie file. You can also pick saved audio files and subtitles together with it.');
+  lastFile=f;stopMovie();resetCaps();sh($('#subx'),true);sh($('#fix'),true);if(subs.length)addSubFiles(subs);
+  const v=$('#fv');v.src=URL.createObjectURL(f);v.muted=!!auds.length;hostMode('file');
+  auds.forEach(x=>{const m=x.name.match(/.* - ([^.]+)\.\w+$/);addTrack(x,m?m[1]:x.name.replace(/\.\w+$/,''))});
+  aNames=tracks.map(t=>t.name);bcast({t:'alangs',names:aNames});setAudioList();pickAudio(0);
+  if(tracks.length)syncAudio(v);
   try{await v.play()}catch{}
   const cap=v.captureStream||v.mozCaptureStream;
   if(!cap)return toast('Use Chrome, Edge or Firefox to stream files');
-  const vs=cap.call(v);movieStream=aud?new MediaStream([...vs.getVideoTracks(),...side.getAudioTracks()]):vs;
+  const vs=cap.call(v);movieStream=tracks.length?new MediaStream([...vs.getVideoTracks(),...tracks.map(t=>t.dst.stream.getAudioTracks()[0])]):vs;
   ready.clear();Object.keys(conns).forEach(callMovie);updReady();
   await new Promise(r=>setTimeout(r,1800));
-  const bad=!aud&&(!movieStream.getAudioTracks().length||v.webkitAudioDecodedByteCount===0||v.mozHasAudio===false);
+  const bad=!tracks.length&&(!movieStream.getAudioTracks().length||v.webkitAudioDecodedByteCount===0||v.mozHasAudio===false);
   v.pause();v.currentTime=0;
-  toast(bad?'No sound: your browser can\'t decode this movie\'s audio (AC3/DTS). Press "Fix audio". It extracts only the audio, not the whole movie, and asks where to save it.':'Ready. Press play once everyone shows as ready.',bad?15000:4000);
-  sh($('#fix'),bad);
+  toast(bad?'No sound: your browser can\'t decode this movie\'s audio (AC3/DTS). Press "Audio tracks". It extracts the audio (every language) and saves it to your computer.':'Ready. Press play once everyone shows as ready. Dubbed in other languages? Use "Audio tracks".',bad?15000:5000);
 }
 function callMovie(id){
   if(!movieStream)return;
@@ -416,7 +442,7 @@ function boost(c){ /* cap bitrate by chosen quality; balanced mode drops frames 
 }
 function stopMovie(){
   Object.keys(calls).filter(k=>k.startsWith('movie:')).forEach(k=>{calls[k].close();delete calls[k]});
-  movieStream=null;ready.clear();updReady();clearInterval(syncAudio.t);$('#fa').pause();const v=$('#fv');v.onplay=v.onplaying=v.onpause=v.onwaiting=v.onseeked=v.onratechange=null;v.pause();v.removeAttribute('src');v.load();
+  movieStream=null;ready.clear();updReady();clearInterval(syncAudio.t);$('#fa').pause();tracks.forEach(t=>{t.el.pause();t.el.removeAttribute('src');t.src.disconnect()});tracks=[];const v=$('#fv');v.onplay=v.onplaying=v.onpause=v.onwaiting=v.onseeked=v.onratechange=null;v.pause();v.removeAttribute('src');v.load();
 }
 
 /* ---------- ready gate, reactions, playback smoothing ---------- */
@@ -444,30 +470,38 @@ $('#snd').onclick=()=>{document.querySelectorAll('.tile video,#gv').forEach(v=>{
 
 /* In-browser audio fix: copy the video untouched, re-encode only the audio to AAC (ffmpeg.wasm, runs locally) */
 function cv(p,t){const e=$('#cv');sh(e,true);e.classList.toggle('ind',p==null);$('#cvb').style.width=(p==null?100:p)+'%';$('#cvt').textContent=t}
-async function fixAudio(){
+async function fixAudio(){ /* extracts EVERY audio track (all dubs) as separate .m4a files, saved straight to disk */
   const f=lastFile;if(!f)return;
-  const name=f.name.replace(/\.\w+$/,'')+' (fixed audio).m4a',r=$('#rdy'),b=$('#fix');
-  let h=null; /* choose the save location first (needs a fresh click); the result goes straight to disk, not browser memory */
-  if(window.showSaveFilePicker){try{h=await showSaveFilePicker({suggestedName:name,types:[{description:'AAC audio',accept:{'audio/mp4':['.m4a']}}]})}catch(e){if(e.name==='AbortError')return}}
+  const base=f.name.replace(/\.\w+$/,''),b=$('#fix');
+  let dir=null; /* choose a folder BEFORE the long job (needs a fresh click) */
+  if(window.showDirectoryPicker){try{dir=await showDirectoryPicker({mode:'readwrite'})}catch(e){if(e.name==='AbortError')return}}
   b.disabled=true;
   try{
-    let t1=Date.now();cv(null,'Loading converter (one-time, about 30 MB)…');
-    const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil;
+    cv(null,'Loading converter (one-time, about 30 MB)…');
+    const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil,logs=[];let t1=Date.now();
+    ff.on('log',({message})=>logs.push(message));
     ff.on('progress',({progress})=>{const p=Math.max(0,Math.min(.99,progress)),m=Math.ceil((Date.now()-t1)/1000/p*(1-p)/60);cv(p*100,'Extracting audio… '+Math.round(p*100)+'%'+(p>.03?' · about '+m+' min left':''))});
     const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
     await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
     const src=new File([f],'input.'+(f.name.split('.').pop()||'mkv'));
-    await ff.createDir('/in'); /* the mount point must exist first */
-    await ff.mount('WORKERFS',{files:[src]},'/in'); /* streams the movie from disk, never loads all 3 GB */
-    t1=Date.now();cv(0,'Extracting audio… 0%');const code=await ff.exec(['-i','/in/'+src.name,'-map','0:a:0','-vn','-c:a','aac','-b:a','160k','-ac','2','out.m4a']);
-    if(code)throw new Error('this file has no convertible audio track (exit '+code+')');
-    cv(100,'Saving to your computer…');const data=await ff.readFile('out.m4a');ff.terminate();
-    let out=new File([data],name,{type:'audio/mp4'});
-    if(h){const w=await h.createWritable();await w.write(data);await w.close();out=await h.getFile()}
-    else{const x=document.createElement('a');x.href=URL.createObjectURL(out);x.download=name;x.click()}
-    r.textContent='';cv(100,'Done');setTimeout(()=>sh($('#cv'),false),2500);toast('Audio saved to your computer. Next time choose the movie and this .m4a together to skip conversion.',9000);
-    await loadFiles([f,out]);
-  }catch(e){r.textContent='';sh($('#cv'),false);toast('Conversion failed: '+(e.message||e),9000)}
+    await ff.createDir('/in');await ff.mount('WORKERFS',{files:[src]},'/in'); /* streams the movie from disk, never loads all 3 GB */
+    await ff.exec(['-i','/in/'+src.name]); /* only lists the streams (ends with a harmless "no output" error) */
+    const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Audio: (\w+)/g,(m,i,l)=>{if(found.length<6)found.push({i:+i,l:l||'und'})});
+    if(!found.length)throw new Error('no audio track found in this file');
+    const names=[];found.forEach(x=>{let n=nice(x.l),k=2;while(names.includes(n))n=nice(x.l)+' '+k++;names.push(n)});
+    const args=['-i','/in/'+src.name];found.forEach((x,k)=>args.push('-map','0:'+x.i,'-vn','-c:a','aac','-b:a','128k','-ac','2','a'+k+'.m4a'));
+    t1=Date.now();cv(0,'Extracting '+found.length+' audio track'+(found.length>1?'s':'')+'… 0%');
+    const code=await ff.exec(args);if(code)throw new Error('could not convert the audio (exit '+code+')');
+    const outs=[];
+    for(let k=0;k<found.length;k++){
+      const fn=base+' - '+names[k]+'.m4a',data=await ff.readFile('a'+k+'.m4a');await ff.deleteFile('a'+k+'.m4a');
+      if(dir){const h=await dir.getFileHandle(fn,{create:true}),w=await h.createWritable();await w.write(data);await w.close();outs.push(await h.getFile())}
+      else{const out=new File([data],fn,{type:'audio/mp4'}),x=document.createElement('a');x.href=URL.createObjectURL(out);x.download=fn;x.click();outs.push(out)}
+    }
+    ff.terminate();cv(100,'Done');setTimeout(()=>sh($('#cv'),false),2500);
+    toast('Saved '+outs.length+' audio track'+(outs.length>1?'s':'')+'. Next time choose the movie and these .m4a files together to skip this step.',9000);
+    await loadFiles([f,...outs]);
+  }catch(e){sh($('#cv'),false);toast('Conversion failed: '+(e.message||e),9000)}
   b.disabled=false;
 }
 $('#fix').onclick=fixAudio;
@@ -496,6 +530,83 @@ function closeRoom(){
 }
 $('#leave').onclick=()=>{if(!isHost||confirm('End the room for everyone? The room code and invite link will stop working.'))closeRoom()};
 addEventListener('pagehide',()=>{if(peer&&!peer.destroyed)try{peer.destroy()}catch{}});
+
+/* ---------- captions (each viewer picks their own on/off and language) ---------- */
+let caps={},fileLangs=[],cueNow={},ccOn=false,ccLang='',ytLangs=[];
+const isSub=f=>/\.(srt|vtt)$/i.test(f.name);
+const nice=c=>{try{return c.length<=3?new Intl.DisplayNames(['en'],{type:'language'}).of(c)||c:c}catch{return c}};
+function parseSub(txt){ /* SRT or WebVTT -> [{s,e,t}] */
+  const tc=x=>{const m=x.trim().match(/(?:(\d+):)?(\d+):(\d+)[,.](\d+)/);return (+(m[1]||0))*3600+(+m[2])*60+(+m[3])+(+('0.'+m[4]))};
+  return txt.replace(/\r/g,'').replace(/^\uFEFF/,'').split(/\n\n+/).map(b=>{
+    const l=b.split('\n'),i=l.findIndex(x=>x.includes('-->'));if(i<0)return null;
+    const [a,z]=l[i].split('-->');
+    return{s:tc(a),e:tc(z),t:l.slice(i+1).join('\n').replace(/<[^>]+>|\{[^}]*\}/g,'').trim()};
+  }).filter(c=>c&&c.t);
+}
+function addSubs(code,text){
+  let name=nice(code),n=2;while(caps[name])name=nice(code)+' '+n++;
+  caps[name]=parseSub(text);fileLangs=Object.keys(caps);
+  bcast({t:'langs',langs:fileLangs});setLangs();toast('Captions added: '+name);
+}
+async function addSubFiles(fs){for(const f of fs){const m=f.name.match(/[.\s_-]([A-Za-z]{2,12})\.(?:srt|vtt)$/i);addSubs(m?m[1]:f.name.replace(/\.\w+$/,''),await f.text())}}
+function resetCaps(){caps={};fileLangs=[];cueNow={};bcast({t:'langs',langs:[]});bcast({t:'cue',c:{}});setLangs()}
+/* host: send the current line of every language whenever it changes; guests show the one they picked */
+setInterval(()=>{
+  if(!isHost||mode!=='file')return;const ks=Object.keys(caps);if(!ks.length)return;
+  const t=$('#fv').currentTime,c={};let ch=ks.length!==Object.keys(cueNow).length;
+  ks.forEach(k=>{const x=caps[k].find(q=>t>=q.s&&t<q.e);c[k]=x?x.t:'';if(c[k]!==cueNow[k])ch=true});
+  if(ch){cueNow=c;bcast({t:'cue',c});renderCap()}
+},200);
+function ytTracks(){ /* YouTube's own caption tracks, read once per video */
+  if(ytTracks.id===ytId)return;ytTracks.id=ytId;
+  try{yt.loadModule('captions')}catch{}
+  setTimeout(()=>{try{
+    ytLangs=(yt.getOption('captions','tracklist')||[]).map(x=>({v:x.languageCode,l:x.languageName||x.displayName||x.languageCode}));
+    if(!(ccOn&&ccLang))yt.unloadModule('captions');
+    setLangs();
+  }catch{}},700);
+}
+function setLangs(){
+  const list=mode==='yt'?ytLangs:mode==='file'?fileLangs.map(k=>({v:k,l:k})):[],sel=$('#cl');
+  sel.innerHTML='';list.forEach(o=>{const e=document.createElement('option');e.value=o.v;e.textContent=o.l;sel.append(e)});
+  if(!list.some(o=>o.v===ccLang))ccLang=list.length?list[0].v:'';
+  sel.value=ccLang;sh(sel,list.length>0);applyCC();
+}
+function applyCC(){
+  const on=ccOn&&!!ccLang;$('#cc').textContent=on?'Captions: On':'Captions: Off';$('#cc').classList.toggle('on',on);
+  if(mode==='yt'&&ytOK){try{if(on){yt.loadModule('captions');yt.setOption('captions','track',{languageCode:ccLang})}else yt.unloadModule('captions')}catch{}}
+  renderCap();
+}
+function renderCap(){const e=$('#cap'),t=mode==='file'&&ccOn?cueNow[ccLang]||'':'';e.textContent=t;sh(e,!!t)}
+$('#cc').onclick=()=>{
+  if(!ccOn&&!ccLang)return toast(isHost?'No captions loaded. Choose .srt/.vtt files with your movie, or press Extract subtitles.':'No captions available for this video');
+  ccOn=!ccOn;applyCC();
+};
+$('#cl').onchange=e=>{ccLang=e.target.value;ccOn=true;applyCC()};
+/* pull text subtitle tracks out of the movie itself (e.g. an MKV) in one pass, in the browser */
+async function extractSubs(){
+  const f=lastFile;if(!f)return;const b=$('#subx');b.disabled=true;
+  try{
+    cv(null,'Loading converter (one-time, about 30 MB)…');
+    const ff=new FFmpegWASM.FFmpeg(),{toBlobURL}=FFmpegUtil,logs=[];
+    ff.on('log',({message})=>logs.push(message));
+    ff.on('progress',({progress})=>cv(Math.max(0,Math.min(.99,progress))*100,'Reading subtitles… '+Math.round(Math.max(0,Math.min(.99,progress))*100)+'% (a 3 GB movie takes several minutes)'));
+    const C='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm/',W='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/';
+    await ff.load({classWorkerURL:await toBlobURL(W+'814.ffmpeg.js','text/javascript'),coreURL:await toBlobURL(C+'ffmpeg-core.js','text/javascript'),wasmURL:await toBlobURL(C+'ffmpeg-core.wasm','application/wasm')});
+    const src=new File([f],'input.'+(f.name.split('.').pop()||'mkv'));
+    await ff.createDir('/in');await ff.mount('WORKERFS',{files:[src]},'/in');
+    await ff.exec(['-i','/in/'+src.name]); /* only lists the streams (ends with a harmless "no output" error) */
+    const found=[];logs.join('\n').replace(/Stream #0:(\d+)(?:\[[^\]]*\])?(?:\((\w+)\))?[^\n]*?: Subtitle: (\w+)/g,(m,i,l,c)=>{if(!/pgs|dvd|dvb|xsub/i.test(c))found.push({i:+i,l:l||'und'})});
+    if(!found.length)throw new Error('no text subtitles found (picture-based subtitles can\'t be used)');
+    const args=['-i','/in/'+src.name];found.forEach((x,k)=>args.push('-map','0:'+x.i,'-c:s','webvtt','s'+k+'.vtt'));
+    cv(0,'Reading subtitles… 0%');
+    const code=await ff.exec(args);if(code)throw new Error('could not read the subtitles (exit '+code+')');
+    for(let k=0;k<found.length;k++)addSubs(found[k].l,new TextDecoder().decode(await ff.readFile('s'+k+'.vtt')));
+    ff.terminate();
+  }catch(e){toast('Could not extract subtitles: '+(e.message||e),9000)}
+  sh($('#cv'),false);b.disabled=false;
+}
+$('#subx').onclick=extractSubs;
 
 /* ---------- wiring ---------- */
 $('#create').onclick=()=>start(true);$('#join').onclick=()=>start(false);
