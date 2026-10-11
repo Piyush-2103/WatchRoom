@@ -1,8 +1,17 @@
 const $ = s => document.querySelector(s), sh = (e, v) => e.hidden = !v;
 let peer, isHost = false, me = {}, hostConn, conns = {}, users = {}, calls = {}, local = null, movieStream = null, mode = 'none', yt = null, ytOK = false, ytId = null, applying = false, invite = '';
 let S = { chat: true, mic: true, cam: true, control: false, locked: false, react: true, fctl: false }, unread = 0;
-const ready = new Set(), BR = { 1080: 6e6, 720: 3.5e6, 480: 1.5e6 };
-const ICE = { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turns:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' }] } };
+const ready = new Set(), BR = { 1080: 3.2e6, 720: 1.8e6, 480: 9e5 };
+const ICE = {
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turns:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' }
+    ]
+  }
+};
 const send = (c, m) => c && c.open && c.send(m);
 const bcast = (m, x) => Object.values(conns).forEach(c => c.peer !== x && send(c, m));
 function toast(t, ms = 3500) { const e = $('#toast'); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, ms) }
@@ -433,8 +442,10 @@ function boost(c) {
       if (!s.track || s.track.kind !== 'video') return;
       s.track.contentHint = 'motion';
       const p = s.getParameters(); p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
-      p.encodings[0].maxBitrate = BR[q]; p.encodings[0].scaleResolutionDownBy = Math.max(1, h / q); p.encodings[0].maxFramerate = 30;
-      p.degradationPreference = 'maintain-framerate'; p.encodings[0].priority = 'high'; p.encodings[0].networkPriority = 'high'; s.setParameters(p).catch(() => { });
+      p.encodings[0].maxBitrate = BR[q];
+      p.encodings[0].scaleResolutionDownBy = h > q ? +(h / q).toFixed(2) : 1;
+      p.encodings[0].maxFramerate = 24;
+      p.degradationPreference = 'balanced'; p.encodings[0].priority = 'high'; p.encodings[0].networkPriority = 'high'; s.setParameters(p).catch(() => { });
     })
   } catch { }
 }
@@ -790,7 +801,7 @@ const h264 = sdp => {
   return sdp.replace(/m=video (\d+) ([\w/]+) ([\d ]+)/, (m, p, q, l) => 'm=video ' + p + ' ' + q + ' ' + [...pts, ...l.trim().split(' ').filter(x => !pts.includes(x))].join(' '))
 };
 function feed(ac, dst, b) { const g = ac.createGain(); g.gain.value = b || 1; g.connect(dst); return g }
-function setVol(x, say) { vol = Math.max(0, Math.min(3, x)); try { localStorage.getItem('wr-vol', vol) } catch { } $('#vol').value = vol; applyVol(); if (say) osd(vol ? 'Volume ' + Math.round(vol * 100) + '%' : 'Muted') }
+function setVol(x, say) { vol = Math.max(0, Math.min(3, x)); try { localStorage.setItem('wr-vol', vol) } catch { } $('#vol').value = vol; applyVol(); if (say) osd(vol ? 'Volume ' + Math.round(vol * 100) + '%' : 'Muted') }
 function applyVol() {
   if (isHost) {
     tracks.forEach((t, k) => t.g.gain.value = k === aSel ? vol : 0);
