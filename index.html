@@ -48,7 +48,7 @@ main{display:flex;flex-direction:column;min-height:0;padding:4px 14px 14px 4px;g
 #rx{pointer-events:none;overflow:hidden;z-index:2}
 .fl{position:absolute;bottom:20px;font-size:34px;animation:fl 2.8s ease-out forwards}
 @keyframes fl{to{transform:translateY(-260px);opacity:0}}
-#stage>#ctl{inset:0 0 auto 0;height:auto;display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(#000c,transparent);opacity:0;transition:opacity .2s;z-index:3}
+#stage>#ctl{inset:0 0 auto 0;height:auto;display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(#000c,transparent);opacity:0;transition:opacity .5s ease;z-index:3}
 #stage:hover #ctl,#ctl:focus-within{opacity:1}
 #ctl button{padding:4px 10px;background:#0008}#ctl input{width:110px;accent-color:var(--gold)}
 #dock{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.sp{flex:1}
@@ -78,6 +78,8 @@ aside{background:linear-gradient(#1c0d10,#120709);border:1px solid var(--line);b
 #volw{display:flex;align-items:center;gap:6px}#volw input{width:90px;accent-color:var(--gold)}
 #stage>#osd{inset:14px auto auto 14px;width:auto;height:auto;max-width:70%;background:#000b;color:var(--cream);padding:6px 14px;border-radius:6px;font-weight:600;z-index:4;pointer-events:none}
 #stage:fullscreen{border:0;box-shadow:none;border-radius:0}
+#stage:fullscreen.idle{cursor:none}
+#stage:fullscreen.idle>#ctl{opacity:0!important;pointer-events:none}
 #stage:fullscreen #cap{font-size:clamp(22px,3vw,52px);bottom:90px}
 body.theatre #stage>#cap{font-size:clamp(18px,2.8vw,40px)}
 dialog{background:#1c0d10;color:var(--cream);border:1px solid var(--gold2);border-radius:12px;padding:20px;max-width:min(420px,92vw)}
@@ -697,10 +699,18 @@ async function extractSubs(){
 }
 $('#subx').onclick=extractSubs;
 
+let idleT=null;
+function wakeStage(){
+  const s=$('#stage');s.classList.remove('idle');clearTimeout(idleT);
+  if(document.fullscreenElement===s)idleT=setTimeout(()=>s.classList.add('idle'),5000);
+}
+['mousemove','mousedown','touchstart','keydown'].forEach(ev=>document.addEventListener(ev,wakeStage,{passive:true}));
+
 document.addEventListener('fullscreenchange',()=>{
   const e=document.fullscreenElement,box=$('#ccbox'),dock=$('#dock');
   if(e===$('#fv')||e===$('#gv')){document.exitFullscreen().then(()=>$('#stage').requestFullscreen()).catch(()=>{});return} /* never leave captions behind */
   if(e===$('#stage'))$('#ctl').prepend(box);else if(box.parentNode!==dock)dock.insertBefore(box,dock.querySelector('.sp'));
+  wakeStage();
 });
 
 function cycleCC(){ /* off -> first language -> next ... -> off */
