@@ -680,7 +680,7 @@ function applyRole() {
   if (!a && !$('#adm').hidden) $('#tabchat').click();
   applySettings();
 }
-function fbtn() { sh($('#gp'), !isHost && (S.fctl \vert{}\vert{} isAdm())); $('#gp').textContent = fplaying ? '⏸️ Pause' : '▶️ Play' }
+function fbtn() { sh($('#gp'), !isHost && (S.fctl || isAdm())); $('#gp').textContent = fplaying ? '⏸️ Pause' : '▶️ Play' }
 $('#gp').onclick = () => send(hostConn, { t: 'film', a: fplaying ? 'pause' : 'play' });
 ['play', 'pause'].forEach(ev => $('#fv').addEventListener(ev, () => bcast({ t: 'fstate', playing: !$('#fv').paused })));
 
