@@ -35,6 +35,7 @@
             /><button id="join">🎟️ Join</button>
           </div>
         </div>
+        <button id="bug2" class="linkbtn">🐞 Report a bug</button>
       </div>
     </div>
 
@@ -44,6 +45,7 @@
         <span id="rc" class="chip"></span><span id="st" class="chip"></span
         ><button id="theatre">🎭 Theatre mode</button
         ><button id="copy">🔗 Copy invite link</button
+        ><button id="bug">🐞 Report a bug</button
         ><button id="leave">🚪 Leave room</button>
       </header>
       <main>
@@ -217,6 +219,21 @@
         <button id="aud-no">Later</button>
         <button id="aud-go" class="pri">🎧 Convert Audio</button>
       </div>
+    </dialog>
+
+    <dialog id="bugdlg">
+      <form id="bugf" autocomplete="off">
+        <h3>🐞 Report a bug</h3>
+        <p>Tell us what went wrong. Your report goes straight to the developer.</p>
+        <input id="bug-name" placeholder="Your name" maxlength="40" aria-label="Your name" />
+        <textarea id="bug-text" placeholder="What happened? What did you expect to happen? (Movie format, steps to repeat the problem…)" maxlength="2000" rows="6" aria-label="Describe the bug"></textarea>
+        <input id="bug-hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <small id="bug-note">Your browser type is sent along to help find the problem. Nothing else about you is collected.</small>
+        <div class="row">
+          <button type="button" id="bug-cancel">Cancel</button>
+          <button id="bug-send" class="pri">📨 Send report</button>
+        </div>
+      </form>
     </dialog>
 
     <button id="snd" class="pri" hidden>🔊 Tap to enable sound</button>

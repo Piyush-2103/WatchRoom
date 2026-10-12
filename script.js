@@ -32,7 +32,7 @@ function start(host) {
       hostConn = peer.connect(room, { reliable: true });
       hostConn.on('open', () => { send(hostConn, { t: 'hello', name }); renderUsers() });
       hostConn.on('data', guestRecv);
-      hostConn.on('close', () => { toast('The host left, so this room is closed.', 6000); setTimeout(() => { history.replaceState(null, '', location.pathname + location.search); location.reload() }, 3500) });
+      hostConn.on('close', () => { if (denied) return; toast('The host left, so this room is closed.', 6000); setTimeout(() => { history.replaceState(null, '', location.pathname + location.search); location.reload() }, 3500) });
     }
   });
   peer.on('connection', c => isHost && hostAccept(c));
@@ -40,6 +40,8 @@ function start(host) {
   peer.on('disconnected', () => { const t = setInterval(() => { if (peer.destroyed || !peer.disconnected) return clearInterval(t); try { peer.reconnect() } catch { } }, 3000) });
   peer.on('error', e => { $('#create').disabled = $('#join').disabled = false; if (e.type === 'peer-unavailable' && (isHost || (hostConn && hostConn.open))) return; toast(e.type === 'peer-unavailable' ? 'Room not found. Check the code.' : 'Connection error: ' + e.type); if (e.type === 'peer-unavailable') setTimeout(() => location.reload(), 2200) });
 }
+/* max 8 chat messages per 4 seconds per person */
+function rateOk(c) { const n = Date.now(); c.__t = (c.__t || []).filter(x => n - x < 4000); c.__t.push(n); return c.__t.length <= 8 }
 function hostAccept(c) {
   c.on('data', d => {
     if (d.t === 'hello') {
@@ -49,7 +51,7 @@ function hostAccept(c) {
       bcast({ t: 'users', users }); renderUsers(); sys(users[c.peer].name + ' joined'); syncCalls();
       if (movieStream) serve(c.peer);
     } else if (conns[c.peer]) {
-      if (d.t === 'chat' && S.chat) { const m = { t: 'chat', from: users[c.peer].name, text: String(d.text).slice(0, 500) }; bcast(m, c.peer); addChat(m) }
+      if (d.t === 'chat' && S.chat && rateOk(c)) { const m = { t: 'chat', from: users[c.peer].name, text: String(d.text).slice(0, 500) }; bcast(m, c.peer); addChat(m) }
       if (d.t === 'yt' && (S.control || adm(c.peer))) { applyYT(d); bcast(d, c.peer) }
       if (d.t === 'film' && (S.fctl || adm(c.peer)) && mode === 'file' && movieStream) { const v = $('#fv'); if (d.a === 'play') v.play().catch(() => { }); else if (d.a === 'pause') v.pause() }
       if (d.t === 'resend' && movieStream) { const o = calls['movie:' + c.peer]; if (o) { o.close(); delete calls['movie:' + c.peer] } delete parentOf[c.peer]; serve(c.peer) }
@@ -87,7 +89,7 @@ function guestRecv(d) {
   else if (d.t === 'alangs') { aNames = d.names; setAudioList() }
   else if (d.t === 'kick') { toast('The host removed you from the room'); setTimeout(() => location.reload(), 1500) }
   else if (d.t === 'mute') { setTrack('audio', false); toast('The host muted you') }
-  else if (d.t === 'denied') toast('This room is locked')
+  else if (d.t === 'denied') { denied = true; toast('This room is locked by the host. Ask them to unlock it, then try again.', 8000) }
 }
 
 /* ---------- chat & people ---------- */
@@ -285,10 +287,16 @@ $('#file').onchange = e => { if (e.target.files.length) loadVideoFile(e.target.f
 
 const ckey = f => f.size + '_' + f.lastModified;
 async function cdir(f, create) { const r = await navigator.storage.getDirectory(), w = await r.getDirectoryHandle('wr-cache', { create: true }); return w.getDirectoryHandle(ckey(f), { create }) }
-async function cput(f, name, data) { const d = await cdir(f, true), h = await d.getFileHandle(name, { create: true }), w = await h.createWritable(); await w.write(data); await w.close(); return h.getFile() }
+/* used when the browser blocks file storage (private mode, insecure page) so conversions are never lost */
+const memCache = {};
+async function cput(f, name, data) {
+  try { const d = await cdir(f, true), h = await d.getFileHandle(name, { create: true }), w = await h.createWritable(); await w.write(data); await w.close(); return await h.getFile() }
+  catch { const x = new File([data], name); (memCache[ckey(f)] = memCache[ckey(f)] || {})[name] = x; return x }
+}
 async function cget(f) {
   const o = { audio: [], subs: [] };
   try { const d = await cdir(f, false); for await (const [n, h] of d.entries()) { if (n.startsWith('seg_')) continue; const x = await h.getFile(); (n.endsWith('.vtt') ? o.subs : o.audio).push(x) } } catch { }
+  for (const x of Object.values(memCache[ckey(f)] || {})) (x.name.endsWith('.vtt') ? o.subs : o.audio).push(x);
   o.audio.sort((a, b) => a.name < b.name ? -1 : 1); o.subs.sort((a, b) => a.name < b.name ? -1 : 1); return o;
 }
 $('#clr').onclick = async () => { try { const r = await navigator.storage.getDirectory(); await r.removeEntry('wr-cache', { recursive: true }); toast('Saved browser audio and subtitles cleared') } catch { toast('Nothing saved yet') } };
@@ -793,7 +801,7 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- your own volume + bigger rooms ---------- */
-let vol = 1, pre = 1, gOut = null, gSrc = [], relayStream = null, parentOf = {}; const kids = new Set(), FAN = 30, MAXLIVE = 8;
+let denied = false, vol = 1, pre = 1, gOut = null, gSrc = [], relayStream = null, parentOf = {}; const kids = new Set(), FAN = 4, MAXLIVE = 8;
 try { vol = +(localStorage.getItem('wr-vol') || 1) } catch { }
 const stereo = sdp => sdp.replace(/(a=fmtp:\d+ [^\r\n]*useinbandfec=1)/g, '$1;stereo=1;sprop-stereo=1;maxaveragebitrate=128000');
 const h264 = sdp => {
@@ -839,6 +847,45 @@ setVol(vol);
 /* ---------- wiring ---------- */
 $('#create').onclick = () => start(true); $('#join').onclick = () => start(false);
 $('#cf').onsubmit = e => { e.preventDefault(); sendChat(); $('#msg').focus() };
+/* ---------- Report a bug: goes to the developer's inbox via FormSubmit (free, no server needed) ---------- */
+const BUG_EMAIL = 'arhamjain768@gmail.com'; /* <-- put YOUR email address here */
+let lastBug = 0;
+function openBug() {
+  if (!$('#bug-name').value) $('#bug-name').value = (typeof me !== 'undefined' && me && me.name) || $('#name').value || '';
+  $('#bugdlg').showModal();
+  ($('#bug-name').value ? $('#bug-text') : $('#bug-name')).focus();
+}
+async function sendBug(name, text) {
+  const res = await fetch('https://formsubmit.co/ajax/' + encodeURIComponent(BUG_EMAIL), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      name, message: text,
+      _subject: 'Watchroom bug report from ' + name, _template: 'table', _captcha: 'false',
+      role: !peer ? 'not in a room' : isHost ? 'host' : 'guest',
+      browser: navigator.userAgent, page: location.origin + location.pathname,
+    }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || j.success === false || j.success === 'false') throw new Error(j.message || 'send failed');
+}
+$('#bug').onclick = $('#bug2').onclick = openBug;
+$('#bug-cancel').onclick = () => $('#bugdlg').close();
+$('#bugf').onsubmit = async e => {
+  e.preventDefault();
+  const name = $('#bug-name').value.trim().slice(0, 40), text = $('#bug-text').value.trim();
+  if (!name) return toast('Please type your name'), $('#bug-name').focus();
+  if (text.length < 10) return toast('Please describe the bug in a little more detail'), $('#bug-text').focus();
+  if ($('#bug-hp').value) { $('#bugdlg').close(); return toast('Thanks! Your report was sent.') } /* hidden field: only bots fill it */
+  if (Date.now() - lastBug < 60000) return toast('Please wait a minute before sending another report');
+  if (BUG_EMAIL.includes('YOUR_EMAIL')) return toast('Bug reports are not set up yet: the site owner must set BUG_EMAIL in script.js', 7000);
+  const b = $('#bug-send'); b.disabled = true; b.textContent = 'Sending…';
+  try {
+    await sendBug(name, text);
+    lastBug = Date.now(); $('#bug-text').value = ''; $('#bugdlg').close(); toast('Thanks! Your report was sent.', 5000);
+  } catch { toast('Could not send the report. Check your internet and try again.', 6000) }
+  b.disabled = false; b.textContent = '📨 Send report';
+};
 $('#theatre').onclick = () => document.body.classList.toggle('theatre');
 $('#copy').onclick = () => navigator.clipboard.writeText(invite).then(() => toast('Invite link copied'));
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {

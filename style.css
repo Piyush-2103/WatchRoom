@@ -559,6 +559,54 @@ aside {
   display: block;
 }
 
+/* Report a bug */
+textarea {
+  background: #0d080acc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 14px;
+  width: 100%;
+  color: var(--cream);
+  font: inherit;
+  resize: vertical;
+  min-height: 110px;
+}
+#bugdlg {
+  width: min(460px, 92vw);
+}
+#bugf {
+  display: grid;
+  gap: 10px;
+}
+#bugf h3,
+#bugf p {
+  margin: 0;
+}
+#bug-note {
+  color: var(--mut);
+  font-size: 12px;
+}
+.hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.linkbtn {
+  background: none;
+  border: 0;
+  color: var(--mut);
+  text-decoration: underline;
+  backdrop-filter: none;
+  padding: 4px 8px;
+}
+.linkbtn:hover:not(:disabled) {
+  background: none;
+  box-shadow: none;
+  color: var(--gold);
+}
+
 /* Overlays, Captions, Volume & Dialogs */
 #snd {
   position: fixed;
